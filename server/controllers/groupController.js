@@ -1,4 +1,5 @@
 const Group = require("../models/Group");
+const crypto = require("crypto");
 
 const createGroup = async (req, res) => {
   try {
@@ -14,7 +15,6 @@ const createGroup = async (req, res) => {
     const userId = req.user.id;
 
     // Generate a unique group code
-    const crypto = require("crypto");
     const groupCode = crypto.randomBytes(4).toString("hex").toUpperCase();
 
     const group = await Group.createGroupWithAdmin({
@@ -71,7 +71,7 @@ const joinGroup = async (req, res) => {
     await Group.addMember({
       group_id: group.group_id,
       user_id: userId,
-      admin: "member",
+      role: "member",
     });
 
     return res.status(200).json({
@@ -115,21 +115,21 @@ const getGroupDetails = async (req, res) => {
     const groupId = req.params.id;
     const userId = req.user.id;
 
-    const member = await Group.findMember(groupId, userId);
-
-    if (!member) {
-      return res.status(403).json({
-        success: false,
-        message: "You are not a member of this group",
-      });
-    }
-
     const group = await Group.findById(groupId);
 
     if (!group) {
       return res.status(404).json({
         success: false,
         message: "Group not found",
+      });
+    }
+
+    const member = await Group.findMember(groupId, userId);
+
+    if (!member) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not a member of this group",
       });
     }
 
@@ -146,7 +146,6 @@ const getGroupDetails = async (req, res) => {
     });
   }
 };
-
 const getGroupMembers = async (req, res) => {
   try {
     const groupId = req.params.id;
@@ -181,13 +180,13 @@ const getGroupMembers = async (req, res) => {
 const removeMember = async (req, res) => {
   try {
     const groupId = req.params.id;
-    const memberId = req.params.userId;
+    const memberId = req.params.memberId;
     const userId = req.user.id;
 
     // Check admin permission
     const admin = await Group.findMember(groupId, userId);
 
-    if (!admin || admin.admin !== "admin") {
+    if (!admin || admin.role !== "admin") {
       return res.status(403).json({
         success: false,
         message: "Only group admin can remove members",
@@ -241,7 +240,7 @@ const leaveGroup = async (req, res) => {
       });
     }
 
-    if (member.admin === "admin") {
+    if (member.role === "admin") {
       return res.status(400).json({
         success: false,
         message: "Admin must transfer admin rights before leaving",

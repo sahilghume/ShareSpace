@@ -2,7 +2,7 @@ const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
 const db = require("./config/db");
-// const groupRoutes = require("./routes/groupRoutes");
+const groupRoutes = require("./routes/groupRoutes");
 // const expenseRoutes = require("./routes/expenseRoutes");
 // const choreRoutes = require("./routes/choreRoutes");
 // const shoppingRoutes = require("./routes/shoppingRoutes");
@@ -17,7 +17,7 @@ app.use(express.json());
 // Routes
 const testRoutes = require("./routes/testRoutes");
 const authRoutes = require("./routes/authRoutes");
-// app.use("/api/groups", groupRoutes);
+app.use("/api/groups", groupRoutes);
 // app.use("/api/expenses", expenseRoutes);
 // app.use("/api/chores", choreRoutes);
 // app.use("/api/shopping", shoppingRoutes);
