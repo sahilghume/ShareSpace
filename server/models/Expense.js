@@ -344,30 +344,49 @@ function getExpenseSplits(expenseId) {
 function getUserExpenses(userId) {
 
     const sql = `
-        SELECT
+        SELECT DISTINCT
             e.expense_id,
             e.group_id,
             g.group_name,
             e.paid_by,
+            payer.name AS paid_by_name,
             e.title,
             e.amount,
             e.category,
             e.expense_date,
-            e.created_at
+            e.created_at,
+            es.share_amount,
+            es.is_paid
         FROM expenses e
-        JOIN groupscreated g ON e.group_id = g.group_id
+
+        JOIN groupscreated g
+            ON e.group_id = g.group_id
+
+        JOIN users payer
+            ON e.paid_by = payer.user_id
+
+        LEFT JOIN expense_splits es
+            ON e.expense_id = es.expense_id
+            AND es.user_id = ?
+
         WHERE e.paid_by = ?
+           OR es.user_id = ?
+
         ORDER BY e.expense_date DESC
     `;
 
     return new Promise((resolve, reject) => {
 
-        sqlConnectionPool.query(sql, [userId], (err, result) => {
+        sqlConnectionPool.query(
+            sql,
+            [userId, userId, userId],
+            (err, result) => {
 
-            if (err) return reject(err);
+                if (err) return reject(err);
 
-            resolve(result);
-        });
+                resolve(result);
+            }
+        );
     });
 }
 
