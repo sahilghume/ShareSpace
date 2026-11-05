@@ -15,6 +15,13 @@ const authMiddleware = async (req, res, next) => {
 
     const token = authHeader.split(" ")[1];
 
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid authorization header.",
+      });
+    }
+
     // Verify JWT
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
@@ -24,11 +31,29 @@ const authMiddleware = async (req, res, next) => {
     if (!savedToken) {
       return res.status(401).json({
         success: false,
-        message: "Invalid or expired session. Please login again.",
+        message: "Invalid session. Please login again.",
       });
     }
 
-    // Attach user details to request
+    // Check token ownership
+    if (savedToken.user_id !== decoded.id) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid authentication session.",
+      });
+    }
+
+    // Check database token expiration
+    if (new Date(savedToken.expires_at) <= new Date()) {
+      await User.deleteToken(decoded.jti);
+
+      return res.status(401).json({
+        success: false,
+        message: "Session expired. Please login again.",
+      });
+    }
+
+    // Attach authenticated user details
     req.user = {
       id: decoded.id,
       email: decoded.email,
@@ -41,7 +66,7 @@ const authMiddleware = async (req, res, next) => {
 
     return res.status(401).json({
       success: false,
-      message: "Invalid or expired token",
+      message: "Invalid or expired token.",
     });
   }
 };

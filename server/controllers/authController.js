@@ -1,11 +1,12 @@
-const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
 const User = require("../models/User");
 
 const registerUser = async (req, res) => {
   try {
     const { fullName, email, password, mobile } = req.body;
+    const normalizedEmail = email?.trim().toLowerCase();
 
     // Validate required fields
     if (!fullName || !email || !password) {
@@ -26,7 +27,7 @@ const registerUser = async (req, res) => {
     }
 
     // Check existing user
-    const existingUser = await User.findByEmail(email.trim());
+    const existingUser = await User.findByEmail(normalizedEmail.trim());
 
     if (existingUser) {
       return res.status(409).json({
@@ -35,28 +36,25 @@ const registerUser = async (req, res) => {
       });
     }
 
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
     // Prepare user data according to database columns
     const userData = {
       name: fullName.trim(),
-      email: email.trim(),
-      password: hashedPassword,
+      email: normalizedEmail,
+      password: password,
       phone: mobile || null,
     };
 
     // Save user
-    const newUser = await User.createUser(userData);
+    const result = await User.createUser(userData);
 
     return res.status(201).json({
       success: true,
       message: "User registered successfully",
       user: {
-        id: newUser.user_id,
-        name: newUser.name,
-        email: newUser.email,
-        phone: newUser.phone,
+        id: result.insertId,
+        name: userData.name,
+        email: userData.email,
+        phone: userData.phone,
       },
     });
   } catch (error) {
@@ -87,8 +85,10 @@ const loginUser = async (req, res) => {
       });
     }
 
+    const normalizedEmail = email.trim().toLowerCase();
+
     // Find user by email
-    const user = await User.findByEmail(email.trim());
+    const user = await User.findByEmail(normalizedEmail);
 
     if (!user) {
       return res.status(401).json({
@@ -97,7 +97,7 @@ const loginUser = async (req, res) => {
       });
     }
 
-    // Compare password
+    // Compare entered password with hashed password
     const isPasswordValid = await bcrypt.compare(password, user.password);
 
     if (!isPasswordValid) {
@@ -110,7 +110,7 @@ const loginUser = async (req, res) => {
     // Generate unique token ID
     const jti = crypto.randomUUID();
 
-    // Token expiration: 1 hour
+    // Set token expiration
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
 
     // Generate JWT
