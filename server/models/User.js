@@ -1,14 +1,35 @@
-let users = [];
 
-const getAllUsers = () => {
-  return users;
-};
+const sqlConnectionPool = require("../config/db");
+const bcrypt = require("bcryptjs");
 
-const addUser = (user) => {
-  users.push(user);
-};
+async function createUser(name, email, password, phone) {
+console.log("Pool:", sqlConnectionPool);
+console.log("Query:", typeof sqlConnectionPool.query);
+  
+    const hashedPassword = await bcrypt.hash(password, 5);
 
-module.exports = {
-  getAllUsers,
-  addUser,
-};
+    const sql = `
+        INSERT INTO users (name, email, password, phone)
+        VALUES (?, ?, ?, ?)
+    `;
+
+    return new Promise((resolve, reject) => {
+
+        sqlConnectionPool.query(
+            sql,
+            [name, email, hashedPassword, phone],
+            (err, result) => {
+
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(result);
+                }
+
+            }
+        );
+
+    });
+}
+
+module.exports = { createUser };
