@@ -6,6 +6,8 @@ import {
 } from 'react-router-dom'
 
 import DashboardLayout from './components/DashboardLayout'
+import Dashboard from './pages/Dashboard'
+import Group from './pages/Group'
 
 function Login() {
   return <h1 className="text-2xl font-bold">Login Page</h1>
@@ -13,14 +15,6 @@ function Login() {
 
 function Register() {
   return <h1 className="text-2xl font-bold">Register Page</h1>
-}
-
-function Dashboard() {
-  return <h1 className="text-2xl font-bold">Dashboard Page</h1>
-}
-
-function Groups() {
-  return <h1 className="text-2xl font-bold">Groups Page</h1>
 }
 
 function Expenses() {
@@ -36,10 +30,8 @@ function ShoppingList() {
 }
 
 function App() {
-
   return (
     <BrowserRouter>
-
       <Routes>
 
         {/* Authentication Routes */}
@@ -49,17 +41,14 @@ function App() {
 
         {/* Dashboard Layout Routes */}
         <Route element={<DashboardLayout />}>
-
           <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/groups" element={<Groups />} />
+          <Route path="/group" element={<Group />} />
           <Route path="/expenses" element={<Expenses />} />
           <Route path="/chores" element={<Chores />} />
           <Route path="/shopping-list" element={<ShoppingList />} />
-
         </Route>
 
       </Routes>
-
     </BrowserRouter>
   )
 }

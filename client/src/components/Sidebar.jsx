@@ -19,8 +19,8 @@ function Sidebar() {
       icon: LayoutDashboard
     },
     {
-      name: 'My Groups',
-      path: '/groups',
+      name: 'My Group',
+      path: '/group',
       icon: Users
     },
     {
