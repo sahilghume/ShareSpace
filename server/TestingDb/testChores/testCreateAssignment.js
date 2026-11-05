@@ -1,19 +1,22 @@
 const { createAssignment } = require("../../models/Chore");
 
 async function testCreateAssignment() {
+
     try {
-        const data = {
+        const result = await createAssignment({
             chore_id: 1,
             group_id: 1,
             assigned_to: 2,
-            assigned_date: "2026-11-06"
-        };
+            assigned_date: "2026-11-09",
+            due_date: "2026-11-10",
+            priority: "High"
+        });
 
-        const result = await createAssignment(data);
         console.log(result);
+   
 
     } catch (error) {
-        console.log("Error:", error.message);
+        console.log("Error:", error);
     }
 }
 

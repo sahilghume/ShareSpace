@@ -1,23 +1,30 @@
 const sqlConnectionPool = require("../config/db");
 
 function createChore(data) {
-
-    const { group_id, chore_name, description } = data;
-
-    const sql = `
-        INSERT INTO chores
-        (group_id, chore_name, description)
-        VALUES (?, ?, ?)
-    `;
-
     return new Promise((resolve, reject) => {
+
+        const {
+            group_id,
+            chore_name,
+            description,
+            created_by,
+            verifier_id
+        } = data;
+
+        const sql = `
+            INSERT INTO chores
+            (group_id, chore_name, description, created_by, verifier_id)
+            VALUES (?, ?, ?, ?, ?)
+        `;
 
         sqlConnectionPool.query(
             sql,
-            [group_id, chore_name, description],
+            [group_id, chore_name, description, created_by, verifier_id || null],
             (err, result) => {
 
-                if (err) return reject(err);
+                if (err) {
+                    return reject(err);
+                }
 
                 resolve({
                     chore_id: result.insertId,
@@ -134,40 +141,55 @@ function deleteChore(choreId) {
 }
 
 
-
 function createAssignment(data) {
 
-    const {
-        chore_id,
-        group_id,
-        assigned_to,
-        assigned_date
-    } = data;
-
-    const sql = `
-        INSERT INTO daily_chore_assignments
-        (chore_id, group_id, assigned_to, assigned_date)
-        VALUES (?, ?, ?, ?)
-    `;
+    console.log("createAssignment called");
+    console.log("Received data:", data);
 
     return new Promise((resolve, reject) => {
 
-        sqlConnectionPool.query(
-            sql,
-            [chore_id, group_id, assigned_to, assigned_date],
-            (err, result) => {
+        const {
+            chore_id,
+            group_id,
+            assigned_to,
+            assigned_date,
+            due_date,
+            priority
+        } = data;
 
-                if (err) return reject(err);
+        console.log("Due date:", due_date);
+        console.log("Priority:", priority);
 
-                resolve({
-                    assignment_id: result.insertId,
-                    message: "Chore assigned successfully"
-                });
+        const sql = `
+            INSERT INTO daily_chore_assignments
+            (chore_id, group_id, assigned_to, assigned_date, due_date, priority)
+            VALUES (?, ?, ?, ?, ?, ?)
+        `;
+
+        const values = [
+            chore_id,
+            group_id,
+            assigned_to,
+            assigned_date,
+            due_date,
+            priority
+        ];
+
+        console.log("SQL values:", values);
+
+        sqlConnectionPool.query(sql, values, (err, result) => {
+
+            if (err) {
+                return reject(err);
             }
-        );
+
+            resolve({
+                assignment_id: result.insertId,
+                message: "Chore assigned successfully"
+            });
+        });
     });
 }
-
 
 function getDailyAssignments(groupId, date) {
 
