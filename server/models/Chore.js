@@ -1,199 +1,192 @@
 const sqlConnectionPool = require("../config/db");
 
 function createChore(data) {
-    return new Promise((resolve, reject) => {
+  return new Promise((resolve, reject) => {
+    const { group_id, chore_name, description, created_by, verifier_id } = data;
 
-        const {
-            group_id,
-            chore_name,
-            description,
-            created_by,
-            verifier_id
-        } = data;
-
-        const sql = `
+    const sql = `
             INSERT INTO chores
             (group_id, chore_name, description, created_by, verifier_id)
             VALUES (?, ?, ?, ?, ?)
         `;
 
-        sqlConnectionPool.query(
-            sql,
-            [group_id, chore_name, description, created_by, verifier_id || null],
-            (err, result) => {
+    sqlConnectionPool.query(
+      sql,
+      [group_id, chore_name, description, created_by, verifier_id || null],
+      (err, result) => {
+        if (err) {
+          return reject(err);
+        }
 
-                if (err) {
-                    return reject(err);
-                }
-
-                resolve({
-                    chore_id: result.insertId,
-                    message: "Chore created successfully"
-                });
-            }
-        );
-    });
+        resolve({
+          chore_id: result.insertId,
+          message: "Chore created successfully",
+        });
+      },
+    );
+  });
 }
 
 function findById(choreId) {
-
-    const sql = `
+  const sql = `
         SELECT *
         FROM chores
         WHERE chore_id = ?
     `;
 
-    return new Promise((resolve, reject) => {
+  return new Promise((resolve, reject) => {
+    sqlConnectionPool.query(sql, [choreId], (err, result) => {
+      if (err) return reject(err);
 
-        sqlConnectionPool.query(sql, [choreId], (err, result) => {
+      if (result.length === 0) {
+        return resolve(null);
+      }
 
-            if (err) return reject(err);
-
-            if (result.length === 0) {
-                return resolve(null);
-            }
-
-            resolve(result[0]);
-        });
+      resolve(result[0]);
     });
+  });
 }
 
 function getGroupChores(groupId) {
-
-    const sql = `
+  const sql = `
         SELECT *
         FROM chores
         WHERE group_id = ?
         ORDER BY chore_id DESC
     `;
 
-    return new Promise((resolve, reject) => {
+  return new Promise((resolve, reject) => {
+    sqlConnectionPool.query(sql, [groupId], (err, result) => {
+      if (err) return reject(err);
 
-        sqlConnectionPool.query(sql, [groupId], (err, result) => {
-
-            if (err) return reject(err);
-
-            resolve(result);
-        });
+      resolve(result);
     });
+  });
 }
 
 function updateChore(choreId, data) {
+  const fields = [];
+  const values = [];
 
-    const { chore_name, description, is_active } = data;
+  if (data.chore_name !== undefined) {
+    fields.push("chore_name = ?");
+    values.push(data.chore_name);
+  }
 
-    const sql = `
+  if (data.description !== undefined) {
+    fields.push("description = ?");
+    values.push(data.description);
+  }
+
+  if (data.is_active !== undefined) {
+    fields.push("is_active = ?");
+    values.push(data.is_active);
+  }
+
+  if (fields.length === 0) {
+    return Promise.resolve({
+      message: "No fields to update",
+    });
+  }
+
+  const sql = `
         UPDATE chores
-        SET chore_name = ?,
-            description = ?,
-            is_active = ?
+        SET ${fields.join(", ")}
         WHERE chore_id = ?
     `;
 
-    return new Promise((resolve, reject) => {
+  values.push(choreId);
 
-        sqlConnectionPool.query(
-            sql,
-            [chore_name, description, is_active, choreId],
-            (err, result) => {
+  return new Promise((resolve, reject) => {
+    sqlConnectionPool.query(sql, values, (err, result) => {
+      if (err) return reject(err);
 
-                if (err) return reject(err);
+      if (result.affectedRows === 0) {
+        return resolve({
+          message: "Chore not found",
+        });
+      }
 
-                if (result.affectedRows === 0) {
-                    return resolve({
-                        message: "Chore not found"
-                    });
-                }
-
-                resolve({
-                    message: "Chore updated successfully"
-                });
-            }
-        );
+      resolve({
+        message: "Chore updated successfully",
+      });
     });
+  });
 }
 
 function deleteChore(choreId) {
-
-    const sql = `
+  const sql = `
         UPDATE chores
         SET is_active = 0
         WHERE chore_id = ?
     `;
 
-    return new Promise((resolve, reject) => {
+  return new Promise((resolve, reject) => {
+    sqlConnectionPool.query(sql, [choreId], (err, result) => {
+      if (err) return reject(err);
 
-        sqlConnectionPool.query(sql, [choreId], (err, result) => {
-
-            if (err) return reject(err);
-
-            if (result.affectedRows === 0) {
-                return resolve({
-                    message: "Chore not found"
-                });
-            }
-
-            resolve({
-                message: "Chore deactivated successfully"
-            });
+      if (result.affectedRows === 0) {
+        return resolve({
+          message: "Chore not found",
         });
+      }
+
+      resolve({
+        message: "Chore deactivated successfully",
+      });
     });
+  });
 }
 
-
 function createAssignment(data) {
+  console.log("createAssignment called");
+  console.log("Received data:", data);
 
-    console.log("createAssignment called");
-    console.log("Received data:", data);
+  return new Promise((resolve, reject) => {
+    const {
+      chore_id,
+      group_id,
+      assigned_to,
+      assigned_date,
+      due_date,
+      priority,
+    } = data;
 
-    return new Promise((resolve, reject) => {
+    console.log("Due date:", due_date);
+    console.log("Priority:", priority);
 
-        const {
-            chore_id,
-            group_id,
-            assigned_to,
-            assigned_date,
-            due_date,
-            priority
-        } = data;
-
-        console.log("Due date:", due_date);
-        console.log("Priority:", priority);
-
-        const sql = `
+    const sql = `
             INSERT INTO daily_chore_assignments
             (chore_id, group_id, assigned_to, assigned_date, due_date, priority)
             VALUES (?, ?, ?, ?, ?, ?)
         `;
 
-        const values = [
-            chore_id,
-            group_id,
-            assigned_to,
-            assigned_date,
-            due_date,
-            priority
-        ];
+    const values = [
+      chore_id,
+      group_id,
+      assigned_to,
+      assigned_date,
+      due_date,
+      priority,
+    ];
 
-        console.log("SQL values:", values);
+    console.log("SQL values:", values);
 
-        sqlConnectionPool.query(sql, values, (err, result) => {
+    sqlConnectionPool.query(sql, values, (err, result) => {
+      if (err) {
+        return reject(err);
+      }
 
-            if (err) {
-                return reject(err);
-            }
-
-            resolve({
-                assignment_id: result.insertId,
-                message: "Chore assigned successfully"
-            });
-        });
+      resolve({
+        assignment_id: result.insertId,
+        message: "Chore assigned successfully",
+      });
     });
+  });
 }
 
 function getDailyAssignments(groupId, date) {
-
-    const sql = `
+  const sql = `
         SELECT
             dca.assignment_id,
             dca.chore_id,
@@ -211,62 +204,17 @@ function getDailyAssignments(groupId, date) {
         ORDER BY dca.assignment_id
     `;
 
-    return new Promise((resolve, reject) => {
+  return new Promise((resolve, reject) => {
+    sqlConnectionPool.query(sql, [groupId, date], (err, result) => {
+      if (err) return reject(err);
 
-        sqlConnectionPool.query(
-            sql,
-            [groupId, date],
-            (err, result) => {
-
-                if (err) return reject(err);
-
-                resolve(result);
-            }
-        );
+      resolve(result);
     });
+  });
 }
-
-
-
-function getDailyAssignments(groupId, date) {
-
-    const sql = `
-        SELECT
-            dca.assignment_id,
-            dca.chore_id,
-            c.chore_name,
-            dca.group_id,
-            dca.assigned_to,
-            u.name AS assigned_to_name,
-            dca.assigned_date,
-            dca.status
-        FROM daily_chore_assignments dca
-        JOIN chores c ON dca.chore_id = c.chore_id
-        JOIN users u ON dca.assigned_to = u.user_id
-        WHERE dca.group_id = ?
-        AND dca.assigned_date = ?
-        ORDER BY dca.assignment_id
-    `;
-
-    return new Promise((resolve, reject) => {
-
-        sqlConnectionPool.query(
-            sql,
-            [groupId, date],
-            (err, result) => {
-
-                if (err) return reject(err);
-
-                resolve(result);
-            }
-        );
-    });
-}
-
 
 function findAssignment(assignmentId) {
-
-    const sql = `
+  const sql = `
         SELECT
             dca.*,
             c.chore_name,
@@ -277,61 +225,49 @@ function findAssignment(assignmentId) {
         WHERE dca.assignment_id = ?
     `;
 
-    return new Promise((resolve, reject) => {
+  return new Promise((resolve, reject) => {
+    sqlConnectionPool.query(sql, [assignmentId], (err, result) => {
+      if (err) return reject(err);
 
-        sqlConnectionPool.query(sql, [assignmentId], (err, result) => {
+      if (result.length === 0) {
+        return resolve(null);
+      }
 
-            if (err) return reject(err);
-
-            if (result.length === 0) {
-                return resolve(null);
-            }
-
-            resolve(result[0]);
-        });
+      resolve(result[0]);
     });
+  });
 }
 
-
-
-
-
 function updateAssignmentStatus(assignmentId, status) {
+  if (!["Pending", "Completed"].includes(status)) {
+    return Promise.reject(
+      new Error("Invalid status. Use Pending or Completed"),
+    );
+  }
 
-    if (!["Pending", "Completed"].includes(status)) {
-        return Promise.reject(
-            new Error("Invalid status. Use Pending or Completed")
-        );
-    }
-
-    const sql = `
+  const sql = `
         UPDATE daily_chore_assignments
         SET status = ?
         WHERE assignment_id = ?
     `;
 
-    return new Promise((resolve, reject) => {
+  return new Promise((resolve, reject) => {
+    sqlConnectionPool.query(sql, [status, assignmentId], (err, result) => {
+      if (err) return reject(err);
 
-        sqlConnectionPool.query(
-            sql,
-            [status, assignmentId],
-            (err, result) => {
+      if (result.affectedRows === 0) {
+        return resolve({
+          message: "Assignment not found",
+        });
+      }
 
-                if (err) return reject(err);
-
-                if (result.affectedRows === 0) {
-                    return resolve({
-                        message: "Assignment not found"
-                    });
-                }
-
-                resolve({
-                    message: "Assignment status updated successfully"
-                });
-            }
-        );
+      resolve({
+        message: "Assignment status updated successfully",
+      });
     });
+  });
 }
+
 
 function submitForVerification(assignmentId, userId) {
 
@@ -481,3 +417,5 @@ module.exports = {
     getPendingVerifications,
     approveChore
 }
+
+
