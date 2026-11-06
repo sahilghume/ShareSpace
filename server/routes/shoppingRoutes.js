@@ -7,16 +7,17 @@ const {
   addShoppingItem,
   getShoppingItems,
   updateShoppingItem,
-  updateItemStatus,
+  submitItemForVerification,
+  approveShoppingItem,
   deleteShoppingItem,
 } = require("../controllers/shoppingController");
 
 router.use(authMiddleware);
 
-// Shopping routes
 router.post("/", addShoppingItem);
 router.get("/group/:groupId", getShoppingItems);
-router.patch("/:id/status", updateItemStatus);
+router.patch("/:id/submit", submitItemForVerification);
+router.patch("/:id/approve", approveShoppingItem);
 router.put("/:id", updateShoppingItem);
 router.delete("/:id", deleteShoppingItem);
 

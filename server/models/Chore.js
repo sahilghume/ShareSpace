@@ -186,28 +186,39 @@ function createAssignment(data) {
 }
 
 function getDailyAssignments(groupId, date) {
-  const sql = `
-        SELECT
-            dca.assignment_id,
-            dca.chore_id,
-            c.chore_name,
-            dca.group_id,
-            dca.assigned_to,
-            u.name AS assigned_to_name,
-            dca.assigned_date,
-            dca.status
-        FROM daily_chore_assignments dca
-        JOIN chores c ON dca.chore_id = c.chore_id
-        JOIN users u ON dca.assigned_to = u.user_id
-        WHERE dca.group_id = ?
-        AND dca.assigned_date = ?
-        ORDER BY dca.assignment_id
-    `;
+  let sql = `
+    SELECT
+      dca.*,
+      c.chore_name AS title,
+      c.description,
+      c.created_by,
+      creator.name AS created_by_name,
+      c.verifier_id,
+      verifier.name AS verifier_name,
+      assigned.name AS assigned_to_name,
+      approved.name AS approved_by_name
+    FROM daily_chore_assignments dca
+    JOIN chores c ON dca.chore_id = c.chore_id
+    JOIN users assigned ON dca.assigned_to = assigned.user_id
+    JOIN users creator ON c.created_by = creator.user_id
+    LEFT JOIN users verifier ON c.verifier_id = verifier.user_id
+    LEFT JOIN users approved ON dca.verified_by = approved.user_id
+    WHERE dca.group_id = ?
+      AND c.is_active = 1
+  `;
+
+  const values = [groupId];
+
+  if (date) {
+    sql += " AND dca.assigned_date = ?";
+    values.push(date);
+  }
+
+  sql += " ORDER BY dca.assignment_id DESC";
 
   return new Promise((resolve, reject) => {
-    sqlConnectionPool.query(sql, [groupId, date], (err, result) => {
+    sqlConnectionPool.query(sql, values, (err, result) => {
       if (err) return reject(err);
-
       resolve(result);
     });
   });
@@ -215,15 +226,17 @@ function getDailyAssignments(groupId, date) {
 
 function findAssignment(assignmentId) {
   const sql = `
-        SELECT
-            dca.*,
-            c.chore_name,
-            u.name AS assigned_to_name
-        FROM daily_chore_assignments dca
-        JOIN chores c ON dca.chore_id = c.chore_id
-        JOIN users u ON dca.assigned_to = u.user_id
-        WHERE dca.assignment_id = ?
-    `;
+    SELECT
+      dca.*,
+      c.chore_name,
+      c.created_by,
+      c.verifier_id,
+      u.name AS assigned_to_name
+    FROM daily_chore_assignments dca
+    JOIN chores c ON dca.chore_id = c.chore_id
+    JOIN users u ON dca.assigned_to = u.user_id
+    WHERE dca.assignment_id = ?
+  `;
 
   return new Promise((resolve, reject) => {
     sqlConnectionPool.query(sql, [assignmentId], (err, result) => {
@@ -268,12 +281,9 @@ function updateAssignmentStatus(assignmentId, status) {
   });
 }
 
-
 function submitForVerification(assignmentId, userId) {
-
-    return new Promise((resolve, reject) => {
-
-        const sql = `
+  return new Promise((resolve, reject) => {
+    const sql = `
             UPDATE daily_chore_assignments
             SET status = 'Awaiting Verification',
                 submitted_at = NOW()
@@ -282,35 +292,27 @@ function submitForVerification(assignmentId, userId) {
             AND status = 'Pending'
         `;
 
-        sqlConnectionPool.query(
-            sql,
-            [assignmentId, userId],
-            (err, result) => {
+    sqlConnectionPool.query(sql, [assignmentId, userId], (err, result) => {
+      if (err) {
+        return reject(err);
+      }
 
-                if (err) {
-                    return reject(err);
-                }
-
-                if (result.affectedRows === 0) {
-                    return reject(
-                        new Error("Invalid assignment or unauthorized submission")
-                    );
-                }
-
-                resolve({
-                    message: "Chore submitted for verification successfully"
-                });
-            }
+      if (result.affectedRows === 0) {
+        return reject(
+          new Error("Invalid assignment or unauthorized submission"),
         );
+      }
+
+      resolve({
+        message: "Chore submitted for verification successfully",
+      });
     });
+  });
 }
 
-
 function getPendingVerifications(userId) {
-
-    return new Promise((resolve, reject) => {
-
-        const sql = `
+  return new Promise((resolve, reject) => {
+    const sql = `
             SELECT
                 da.assignment_id,
                 da.chore_id,
@@ -343,25 +345,17 @@ function getPendingVerifications(userId) {
             ORDER BY da.submitted_at DESC
         `;
 
-        sqlConnectionPool.query(
-            sql,
-            [userId, userId],
-            (err, result) => {
+    sqlConnectionPool.query(sql, [userId, userId], (err, result) => {
+      if (err) return reject(err);
 
-                if (err) return reject(err);
-
-                resolve(result);
-            }
-        );
+      resolve(result);
     });
+  });
 }
 
-
 function approveChore(assignmentId, verifierId) {
-
-    return new Promise((resolve, reject) => {
-
-        const sql = `
+  return new Promise((resolve, reject) => {
+    const sql = `
             UPDATE daily_chore_assignments da
 
             JOIN chores c
@@ -380,42 +374,37 @@ function approveChore(assignmentId, verifierId) {
             )
         `;
 
-        sqlConnectionPool.query(
-            sql,
-            [verifierId, assignmentId, verifierId, verifierId],
-            (err, result) => {
+    sqlConnectionPool.query(
+      sql,
+      [verifierId, assignmentId, verifierId, verifierId],
+      (err, result) => {
+        if (err) return reject(err);
 
-                if (err) return reject(err);
+        if (result.affectedRows === 0) {
+          return reject(
+            new Error("Invalid assignment or unauthorized verification"),
+          );
+        }
 
-                if (result.affectedRows === 0) {
-                    return reject(
-                        new Error(
-                            "Invalid assignment or unauthorized verification"
-                        )
-                    );
-                }
-
-                resolve({
-                    message: "Chore approved successfully"
-                });
-            }
-        );
-    });
+        resolve({
+          message: "Chore approved successfully",
+        });
+      },
+    );
+  });
 }
 
 module.exports = {
-    createChore,
-    findById,
-    getGroupChores,
-    updateChore,
-    deleteChore,
-    createAssignment,
-    getDailyAssignments,
-    findAssignment,
-    updateAssignmentStatus,
-    submitForVerification,
-    getPendingVerifications,
-    approveChore
-}
-
-
+  createChore,
+  findById,
+  getGroupChores,
+  updateChore,
+  deleteChore,
+  createAssignment,
+  getDailyAssignments,
+  findAssignment,
+  updateAssignmentStatus,
+  submitForVerification,
+  getPendingVerifications,
+  approveChore,
+};

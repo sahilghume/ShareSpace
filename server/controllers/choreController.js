@@ -245,10 +245,10 @@ const deleteChore = async (req, res) => {
 // 6. Assign chore
 const assignChore = async (req, res) => {
   try {
-    const { choreId, assignedTo, assignedDate } = req.body;
+    const { choreId, assignedTo, assignedDate, dueDate, priority } = req.body;
     const userId = req.user.id;
 
-    if (!choreId || !assignedTo || !assignedDate) {
+    if (!choreId || !assignedTo || !assignedDate || !dueDate) {
       return res.status(400).json({
         success: false,
         message: "Chore, assigned member and date are required",
@@ -287,6 +287,8 @@ const assignChore = async (req, res) => {
       group_id: chore.group_id,
       assigned_to: assignedTo,
       assigned_date: assignedDate,
+      due_date: dueDate,
+      priority: priority || "Medium",
     });
 
     return res.status(201).json({
@@ -327,10 +329,7 @@ const getDailyAssignments = async (req, res) => {
       });
     }
 
-    const assignments = await Chore.getDailyAssignments(
-      groupId,
-      date || new Date().toISOString().slice(0, 10),
-    );
+    const assignments = await Chore.getDailyAssignments(groupId, date);
 
     return res.status(200).json({
       success: true,
@@ -404,6 +403,94 @@ const updateChoreStatus = async (req, res) => {
   }
 };
 
+const submitChoreForVerification = async (req, res) => {
+  try {
+    const assignmentId = req.params.id;
+    const userId = req.user.id;
+
+    const assignment = await Chore.findAssignment(assignmentId);
+
+    if (!assignment) {
+      return res.status(404).json({
+        success: false,
+        message: "Assignment not found",
+      });
+    }
+
+    if (Number(assignment.assigned_to) !== Number(userId)) {
+      return res.status(403).json({
+        success: false,
+        message: "Only the assigned member can submit this chore",
+      });
+    }
+
+    if (assignment.status !== "Pending") {
+      return res.status(400).json({
+        success: false,
+        message: "Only pending chores can be submitted",
+      });
+    }
+
+    await Chore.submitForVerification(assignmentId, userId);
+
+    return res.status(200).json({
+      success: true,
+      message: "Chore submitted for verification",
+    });
+  } catch (error) {
+    console.error("Submit Chore Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Unable to submit chore",
+    });
+  }
+};
+
+const approveChore = async (req, res) => {
+  try {
+    const assignmentId = req.params.id;
+    const userId = req.user.id;
+
+    const assignment = await Chore.findAssignment(assignmentId);
+
+    if (!assignment) {
+      return res.status(404).json({
+        success: false,
+        message: "Assignment not found",
+      });
+    }
+
+    if (
+      Number(assignment.created_by) !== Number(userId) &&
+      Number(assignment.verifier_id) !== Number(userId)
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to verify this chore",
+      });
+    }
+
+    if (assignment.status !== "Awaiting Verification") {
+      return res.status(400).json({
+        success: false,
+        message: "Chore is not awaiting verification",
+      });
+    }
+
+    await Chore.approveChore(assignmentId, userId);
+
+    return res.status(200).json({
+      success: true,
+      message: "Chore approved successfully",
+    });
+  } catch (error) {
+    console.error("Approve Chore Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Unable to approve chore",
+    });
+  }
+};
 module.exports = {
   createChore,
   getGroupChores,
@@ -413,4 +500,6 @@ module.exports = {
   assignChore,
   getDailyAssignments,
   updateChoreStatus,
+  submitChoreForVerification,
+  approveChore,
 };

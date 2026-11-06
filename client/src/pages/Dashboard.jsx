@@ -1,6 +1,11 @@
-
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
+import { getMyGroups } from "../services/groupService";
+import {
+  getGroupExpenses,
+  getExpenseSplits,
+} from "../services/expenseService";
+import { getDailyAssignments } from "../services/choreService";
 
 import {
   Wallet,
@@ -31,12 +36,12 @@ import {
   getChores,
 } from "../services/choreStorage";
 
-import {
-  getShoppingItems,
-} from "../services/shoppingStorage";
+import { getShoppingItems } from "../services/shoppingStorage";
 
 function Dashboard() {
-  const GROUP_ID = 1;
+  const [group, setGroup] = useState(null);
+  const [groupLoading, setGroupLoading] = useState(true);
+  const [groupError, setGroupError] = useState("");
 
   const [chores, setChores] = useState(() => getChores());
   const [shoppingItems, setShoppingItems] = useState(() => getShoppingItems());
@@ -49,6 +54,17 @@ function Dashboard() {
   const [editingNoticeId, setEditingNoticeId] = useState(null);
   const [editTitle, setEditTitle] = useState("");
   const [editMessage, setEditMessage] = useState("");
+
+  const [expenses, setExpenses] = useState([]);
+  const [expenseLoading, setExpenseLoading] = useState(true);
+  const [expenseError, setExpenseError] = useState("");
+
+  const [expenseSplits, setExpenseSplits] = useState([]);
+  const [balanceLoading, setBalanceLoading] = useState(true);
+
+  const [choreAssignments, setChoreAssignments] = useState([]);
+  const [choreLoading, setChoreLoading] = useState(true);
+  const [choreError, setChoreError] = useState("");
 
   // Listen for chore and shopping list updates
   useEffect(() => {
@@ -75,11 +91,110 @@ function Dashboard() {
     };
   }, []);
 
+  // Fetch group details
+  useEffect(() => {
+    const fetchGroup = async () => {
+      try {
+        setGroupError("");
+
+        const groups = await getMyGroups();
+
+        if (!groups || groups.length === 0) {
+          throw new Error("You are not a member of any group.");
+        }
+
+        setGroup(groups[0]);
+      } catch (error) {
+        setGroupError(error.message);
+      } finally {
+        setGroupLoading(false);
+      }
+    };
+
+    fetchGroup();
+  }, []);
+
+  // Fetch group expenses
+  useEffect(() => {
+    const fetchExpenses = async () => {
+      try {
+        setExpenseError("");
+        setExpenseLoading(true);
+
+        const data = await getGroupExpenses(group.group_id);
+        setExpenses(data);
+      } catch (error) {
+        setExpenseError(error.message);
+      } finally {
+        setExpenseLoading(false);
+      }
+    };
+
+    if (group?.group_id) {
+      fetchExpenses();
+    }
+  }, [group]);
+
+  // Fetch expense splits
+  useEffect(() => {
+    const fetchExpenseSplits = async () => {
+      try {
+        setBalanceLoading(true);
+
+        const allSplits = await Promise.all(
+          expenses.map(async (expense) => {
+            const splits = await getExpenseSplits(expense.expense_id);
+
+            return splits.map((split) => ({
+              ...split,
+              paid_by: expense.paid_by,
+              paid_by_name: expense.paid_by_name,
+              expense_title: expense.title,
+            }));
+          })
+        );
+
+        setExpenseSplits(allSplits.flat());
+      } catch (error) {
+        console.error("Balance Fetch Error:", error);
+      } finally {
+        setBalanceLoading(false);
+      }
+    };
+
+    if (!expenseLoading) {
+      fetchExpenseSplits();
+    }
+  }, [expenses, expenseLoading]);
+
+  // Fetch chore assignments
+  useEffect(() => {
+    const fetchChoreAssignments = async () => {
+      try {
+        setChoreLoading(true);
+        setChoreError("");
+
+        const data = await getDailyAssignments(group.group_id);
+        setChoreAssignments(data);
+      } catch (error) {
+        setChoreError(error.message);
+      } finally {
+        setChoreLoading(false);
+      }
+    };
+
+    if (group?.group_id) {
+      fetchChoreAssignments();
+    }
+  }, [group]);
+
   // Fetch notices from backend
-  const fetchNotices = async () => {
+  const fetchNotices = async (groupId) => {
     try {
       setNoticeError("");
-      const data = await getGroupNotices(GROUP_ID);
+      setNoticeLoading(true);
+
+      const data = await getGroupNotices(groupId);
       setNotices(data);
     } catch (error) {
       setNoticeError(error.message);
@@ -88,49 +203,87 @@ function Dashboard() {
     }
   };
 
+  // Fetch group notices
   useEffect(() => {
-    fetchNotices();
-  }, []);
+    if (group?.group_id) {
+      fetchNotices(group.group_id);
+    }
+  }, [group]);
 
   // Notifications for chore creators and secondary verifiers
   const choreNotifications = chores.filter(
     (chore) =>
-      (
-        chore.createdBy === CURRENT_USER ||
-        chore.secondaryVerifier === CURRENT_USER
-      ) &&
+      (chore.createdBy === CURRENT_USER ||
+        chore.secondaryVerifier === CURRENT_USER) &&
       chore.status === "Awaiting Verification"
   );
 
   // Notifications for shopping item creators and secondary verifiers
   const shoppingNotifications = shoppingItems.filter(
     (item) =>
-      (
-        item.createdBy === CURRENT_USER ||
-        item.secondaryVerifier === CURRENT_USER
-      ) &&
+      (item.createdBy === CURRENT_USER ||
+        item.secondaryVerifier === CURRENT_USER) &&
       item.status === "Awaiting Verification"
   );
+
+  const currentDate = new Date();
+
+  const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
+  const currentUserId = Number(currentUser.id);
+
+  // Calculate monthly expenses
+  const totalMonthlyExpenses = expenses
+    .filter((expense) => {
+      const expenseDate = String(expense.expense_date).slice(0, 10);
+
+      return (
+        expenseDate.slice(0, 4) === String(currentDate.getFullYear()) &&
+        expenseDate.slice(5, 7) ===
+        String(currentDate.getMonth() + 1).padStart(2, "0")
+      );
+    })
+    .reduce((total, expense) => total + Number(expense.amount), 0);
+
+  // Calculate pending chores assigned to current user
+  const pendingChores = choreAssignments.filter(
+    (assignment) =>
+      Number(assignment.assigned_to) === currentUserId &&
+      assignment.status === "Pending"
+  ).length;
+
+  // Calculate outstanding balance
+  const yourBalance = expenseSplits
+    .filter(
+      (split) =>
+        Number(split.user_id) === currentUserId &&
+        Number(split.paid_by) !== currentUserId &&
+        Number(split.is_paid) === 0
+    )
+    .reduce((total, split) => total + Number(split.share_amount), 0);
 
   // Dashboard Summary Data
   const summaryCards = [
     {
       title: "Total Expenses",
-      amount: "₹12,500",
+      amount: expenseLoading
+        ? "Loading..."
+        : `₹${totalMonthlyExpenses.toLocaleString("en-IN")}`,
       description: "This month",
       icon: Wallet,
       color: "bg-green-100 text-green-700",
     },
     {
       title: "Your Balance",
-      amount: "₹2,500",
+      amount: balanceLoading
+        ? "Loading..."
+        : `₹${yourBalance.toLocaleString("en-IN")}`,
       description: "You owe others",
       icon: CreditCard,
       color: "bg-orange-100 text-orange-600",
     },
     {
       title: "Pending Chores",
-      amount: "2",
+      amount: choreLoading ? "Loading..." : pendingChores,
       description: "Tasks assigned to you",
       icon: ClipboardCheck,
       color: "bg-purple-100 text-purple-600",
@@ -138,70 +291,69 @@ function Dashboard() {
   ];
 
   // Recent Expense Data
-  const recentExpenses = [
-    {
-      title: "Monthly Electricity Bill",
-      category: "Utilities",
-      paidBy: "Rahul",
-      date: "04 Nov 2026",
-      amount: "₹2,400",
-    },
-    {
-      title: "Grocery Shopping",
-      category: "Groceries",
-      paidBy: "Amit",
-      date: "03 Nov 2026",
-      amount: "₹1,850",
-    },
-    {
-      title: "Internet Bill",
-      category: "Utilities",
-      paidBy: "Rohit",
-      date: "02 Nov 2026",
-      amount: "₹999",
-    },
-  ];
+  const recentExpenses = [...expenses]
+    .sort(
+      (a, b) =>
+        new Date(b.expense_date) - new Date(a.expense_date)
+    )
+    .slice(0, 3)
+    .map((expense) => ({
+      id: expense.expense_id,
+      title: expense.title,
+      category: expense.category || "Other",
+      paidBy: expense.paid_by_name,
+      date: new Date(
+        `${String(expense.expense_date).slice(0, 10)}T00:00:00`
+      ).toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      }),
+      amount: `₹${Number(expense.amount).toLocaleString("en-IN")}`,
+    }));
 
-  // Pending Payment Data
-  const pendingPayments = [
-    {
-      name: "Rahul Sharma",
-      reason: "Electricity Bill",
-      amount: "₹600",
-    },
-    {
-      name: "Amit Patil",
-      reason: "Grocery Shopping",
-      amount: "₹450",
-    },
-    {
-      name: "Priya Deshmukh",
-      reason: "Internet Bill",
-      amount: "₹333",
-    },
-  ];
+  // Get unpaid payments for the current user
+  const pendingPayments = expenseSplits
+    .filter(
+      (split) =>
+        Number(split.user_id) === currentUserId &&
+        Number(split.paid_by) !== currentUserId &&
+        Number(split.is_paid) === 0
+    )
+    .map((split) => ({
+      id: split.split_id,
+      name: split.paid_by_name,
+      reason: split.expense_title,
+      amount: Number(split.share_amount),
+    }));
+
+  const totalPendingPayments = pendingPayments.reduce(
+    (total, payment) => total + payment.amount,
+    0
+  );
 
   // Upcoming Chores Data
-  const upcomingChores = [
-    {
-      title: "Clean Kitchen",
-      date: "Today",
-      assignedTo: "Rohit",
-      status: "Pending",
-    },
-    {
-      title: "Take Out Garbage",
-      date: "Tomorrow",
-      assignedTo: "Rahul",
-      status: "Upcoming",
-    },
-    {
-      title: "Clean Living Room",
-      date: "06 Nov 2026",
-      assignedTo: "Amit",
-      status: "Upcoming",
-    },
-  ];
+  const upcomingChores = [...choreAssignments]
+    .filter((chore) => chore.status !== "Completed")
+    .sort((a, b) => {
+      return new Date(a.due_date) - new Date(b.due_date);
+    })
+    .slice(0, 3)
+    .map((chore) => ({
+      id: chore.assignment_id,
+      title: chore.chore_name,
+      assignedTo: chore.assigned_to_name,
+      date: chore.due_date
+        ? new Date(
+          `${String(chore.due_date).slice(0, 10)}T00:00:00`
+        ).toLocaleDateString("en-IN", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+        })
+        : "No due date",
+      status: chore.status,
+    }));
 
   // Add New Notice
   async function addNotice(e) {
@@ -211,18 +363,23 @@ function Dashboard() {
       return;
     }
 
+    if (!group?.group_id) {
+      setNoticeError("Group not found.");
+      return;
+    }
+
     try {
       setNoticeError("");
       setNoticeSubmitting(true);
 
       await createNotice({
-        groupId: GROUP_ID,
+        groupId: group.group_id,
         title: "Notice",
         message: noticeInput.trim(),
       });
 
       setNoticeInput("");
-      await fetchNotices();
+      await fetchNotices(group.group_id);
     } catch (error) {
       setNoticeError(error.message);
     } finally {
@@ -255,6 +412,7 @@ function Dashboard() {
     setEditMessage("");
   }
 
+  // Update notice
   async function handleUpdateNotice(noticeId) {
     if (!editTitle.trim() || !editMessage.trim()) {
       setNoticeError("Title and message are required.");
@@ -270,12 +428,13 @@ function Dashboard() {
       });
 
       cancelEdit();
-      await fetchNotices();
+      await fetchNotices(group.group_id);
     } catch (error) {
       setNoticeError(error.message);
     }
   }
 
+  // Delete notice
   async function handleDeleteNotice(noticeId) {
     const confirmed = window.confirm(
       "Are you sure you want to delete this notice?"
@@ -287,7 +446,7 @@ function Dashboard() {
       setNoticeError("");
 
       await deleteNotice(noticeId);
-      await fetchNotices();
+      await fetchNotices(group.group_id);
     } catch (error) {
       setNoticeError(error.message);
     }
@@ -307,9 +466,15 @@ function Dashboard() {
 
         <div className="flex items-center gap-2 bg-green-100 text-green-700 px-4 py-2 rounded-lg w-fit">
           <Megaphone size={18} />
-          <span className="text-sm font-medium">Green Valley Flat</span>
+          <span className="text-sm font-medium">
+            {groupLoading ? "Loading group..." : group?.group_name || "No Group"}
+          </span>
         </div>
       </div>
+
+      {groupError && (
+        <p className="text-sm text-red-500">{groupError}</p>
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
@@ -597,7 +762,6 @@ function Dashboard() {
                       </p>
                     </div>
 
-
                     <p className="text-sm text-gray-600 mt-1 break-words">
                       {notice.message}
                     </p>
@@ -672,9 +836,12 @@ function Dashboard() {
               </p>
             </div>
 
-            <button className="text-green-700 text-sm font-semibold hover:text-green-800">
+            <Link
+              to="/expenses"
+              className="text-green-700 text-sm font-semibold hover:text-green-800"
+            >
               View All
-            </button>
+            </Link>
           </div>
 
           <div className="overflow-x-auto">
@@ -689,34 +856,54 @@ function Dashboard() {
               </thead>
 
               <tbody>
-                {recentExpenses.map((expense) => (
-                  <tr
-                    key={expense.title}
-                    className="border-t border-gray-100 hover:bg-green-50 transition-colors"
-                  >
-                    <td className="px-5 py-4">
-                      <p className="text-sm font-semibold text-gray-800">
-                        {expense.title}
-                      </p>
-
-                      <p className="text-xs text-gray-500 mt-1">
-                        {expense.category}
-                      </p>
-                    </td>
-
-                    <td className="px-5 py-4 text-sm text-gray-600">
-                      {expense.paidBy}
-                    </td>
-
-                    <td className="px-5 py-4 text-sm text-gray-500 whitespace-nowrap">
-                      {expense.date}
-                    </td>
-
-                    <td className="px-5 py-4 text-sm font-semibold text-gray-800 whitespace-nowrap">
-                      {expense.amount}
+                {expenseLoading ? (
+                  <tr>
+                    <td colSpan="4" className="text-center py-8 text-gray-500">
+                      Loading expenses...
                     </td>
                   </tr>
-                ))}
+                ) : expenseError ? (
+                  <tr>
+                    <td colSpan="4" className="text-center py-8 text-red-500">
+                      {expenseError}
+                    </td>
+                  </tr>
+                ) : recentExpenses.length > 0 ? (
+                  recentExpenses.map((expense) => (
+                    <tr
+                      key={expense.id}
+                      className="border-t border-gray-100 hover:bg-green-50 transition-colors"
+                    >
+                      <td className="px-5 py-4">
+                        <p className="text-sm font-semibold text-gray-800">
+                          {expense.title}
+                        </p>
+
+                        <p className="text-xs text-gray-500 mt-1">
+                          {expense.category}
+                        </p>
+                      </td>
+
+                      <td className="px-5 py-4 text-sm text-gray-600">
+                        {expense.paidBy}
+                      </td>
+
+                      <td className="px-5 py-4 text-sm text-gray-500 whitespace-nowrap">
+                        {expense.date}
+                      </td>
+
+                      <td className="px-5 py-4 text-sm font-semibold text-gray-800 whitespace-nowrap">
+                        {expense.amount}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="4" className="text-center py-8 text-gray-500">
+                      No expenses found. Add your first group expense!
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -735,26 +922,32 @@ function Dashboard() {
           </div>
 
           <div className="p-5 space-y-5">
-            {pendingPayments.map((payment) => (
-              <div
-                key={payment.name}
-                className="flex items-center justify-between gap-3"
-              >
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-gray-800">
-                    {payment.name}
-                  </p>
+            {pendingPayments.length === 0 ? (
+              <p className="text-sm text-gray-500 text-center py-4">
+                No pending payments!
+              </p>
+            ) : (
+              pendingPayments.map((payment) => (
+                <div
+                  key={payment.id}
+                  className="flex items-center justify-between gap-3"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-gray-800">
+                      {payment.name}
+                    </p>
 
-                  <p className="text-xs text-gray-500 mt-1">
-                    {payment.reason}
+                    <p className="text-xs text-gray-500 mt-1">
+                      {payment.reason}
+                    </p>
+                  </div>
+
+                  <p className="text-sm font-bold text-orange-600 whitespace-nowrap">
+                    ₹{payment.amount.toLocaleString("en-IN")}
                   </p>
                 </div>
-
-                <p className="text-sm font-bold text-orange-600 whitespace-nowrap">
-                  {payment.amount}
-                </p>
-              </div>
-            ))}
+              ))
+            )}
 
             <div className="bg-orange-50 rounded-lg p-4">
               <p className="text-xs text-orange-700">
@@ -762,7 +955,7 @@ function Dashboard() {
               </p>
 
               <h3 className="text-2xl font-bold text-orange-700 mt-1">
-                ₹1,383
+                ₹{totalPendingPayments.toLocaleString("en-IN")}
               </h3>
             </div>
 
@@ -786,50 +979,67 @@ function Dashboard() {
             </p>
           </div>
 
-          <button className="text-green-700 text-sm font-semibold hover:text-green-800">
+          <Link
+            to="/chores"
+            className="text-green-700 text-sm font-semibold hover:text-green-800"
+          >
             View All
-          </button>
+          </Link>
         </div>
 
         <div className="divide-y divide-gray-100">
-          {upcomingChores.map((chore) => (
-            <div
-              key={chore.title}
-              className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-5 hover:bg-green-50 transition-colors"
-            >
-              <div className="flex items-center gap-3">
-                <div className="bg-green-100 text-green-700 p-3 rounded-lg">
-                  <ClipboardCheck size={21} />
+          {choreLoading ? (
+            <p className="text-center py-8 text-gray-500">
+              Loading chores...
+            </p>
+          ) : choreError ? (
+            <p className="text-center py-8 text-red-500">
+              {choreError}
+            </p>
+          ) : upcomingChores.length > 0 ? (
+            upcomingChores.map((chore) => (
+              <div
+                key={chore.id}
+                className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-5 hover:bg-green-50 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="bg-green-100 text-green-700 p-3 rounded-lg">
+                    <ClipboardCheck size={21} />
+                  </div>
+
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-800">
+                      {chore.title}
+                    </h3>
+
+                    <p className="text-xs text-gray-500 mt-1">
+                      Assigned to {chore.assignedTo}
+                    </p>
+                  </div>
                 </div>
 
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-800">
-                    {chore.title}
-                  </h3>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-1 text-gray-500 text-xs">
+                    <Clock size={15} />
+                    {chore.date}
+                  </div>
 
-                  <p className="text-xs text-gray-500 mt-1">
-                    Assigned to {chore.assignedTo}
-                  </p>
+                  <span
+                    className={`text-xs font-semibold px-3 py-1 rounded-full ${chore.status === "Pending"
+                      ? "bg-orange-100 text-orange-700"
+                      : "bg-blue-100 text-blue-700"
+                      }`}
+                  >
+                    {chore.status}
+                  </span>
                 </div>
               </div>
-
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-1 text-gray-500 text-xs">
-                  <Clock size={15} />
-                  {chore.date}
-                </div>
-
-                <span
-                  className={`text-xs font-semibold px-3 py-1 rounded-full ${chore.status === "Pending"
-                    ? "bg-orange-100 text-orange-700"
-                    : "bg-blue-100 text-blue-700"
-                    }`}
-                >
-                  {chore.status}
-                </span>
-              </div>
-            </div>
-          ))}
+            ))
+          ) : (
+            <p className="text-center py-8 text-gray-500">
+              No upcoming chores found.
+            </p>
+          )}
         </div>
       </div>
 
@@ -841,6 +1051,7 @@ function Dashboard() {
           <div>
             <div className="flex items-center gap-3 mb-3">
               <ShoppingBasket size={25} className="text-green-600" />
+
               <h3 className="text-lg font-bold">
                 Shared Shopping List
               </h3>
@@ -898,6 +1109,7 @@ function Dashboard() {
 
               <div className="flex items-center gap-1 -mt-5 bg-green-100 px-3 py-1 rounded-full">
                 <Users size={17} className="text-green-700" />
+
                 <span className="text-xs font-bold text-green-700">
                   Roommates
                 </span>

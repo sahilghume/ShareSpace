@@ -12,40 +12,110 @@ import {
 } from 'lucide-react'
 
 import {
-  CURRENT_USER,
-  getChores,
-  saveChores
-} from '../services/choreStorage'
+  getDailyAssignments,
+  createChore,
+  assignChore,
+  submitChoreForVerification,
+  approveChore as approveChoreAPI
+} from '../services/choreService'
+
+import {
+  getMyGroups,
+  getGroupMembers
+} from '../services/groupService'
 
 function Chores() {
-
-  const [chores, setChores] = useState(() => getChores())
+  const [chores, setChores] = useState([])
+  const [members, setMembers] = useState([])
+  const [groupId, setGroupId] = useState(null)
+  const [currentUser, setCurrentUser] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
   const [showForm, setShowForm] = useState(false)
   const [filter, setFilter] = useState('All')
 
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
-  const [assignedTo, setAssignedTo] = useState('Rahul')
+  const [assignedTo, setAssignedTo] = useState('')
   const [secondaryVerifier, setSecondaryVerifier] = useState('')
   const [dueDate, setDueDate] = useState('')
   const [priority, setPriority] = useState('Medium')
 
-  const members = ['Rohit', 'Rahul', 'Amit', 'Priya', 'Sahil', 'Arya']
+  const formatAssignments = (assignments) => {
+    return assignments.map((item) => ({
+      id: item.assignment_id,
+      choreId: item.chore_id,
+      title: item.title,
+      description: item.description,
+      assignedTo: item.assigned_to,
+      assignedToName: item.assigned_to_name,
+      createdBy: item.created_by,
+      createdByName: item.created_by_name,
+      secondaryVerifier: item.verifier_id,
+      verifierName: item.verifier_name,
+      dueDate: item.due_date,
+      priority: item.priority,
+      status: item.status,
+      submittedAt: item.submitted_at,
+      approvedBy: item.verified_by,
+      approvedByName: item.approved_by_name,
+      approvedAt: item.verified_at
+    }))
+  }
 
-  // Listen for chore updates
+  // Load chores, group members and current user
   useEffect(() => {
-    const updateChores = () => {
-      setChores(getChores())
+    const loadChoresData = async () => {
+      try {
+        setLoading(true)
+        setError('')
+
+        const storedUser = JSON.parse(
+          localStorage.getItem('user') || '{}'
+        )
+
+        const userId = Number(storedUser.id || storedUser.user_id)
+
+        setCurrentUser({
+          id: userId,
+          name: storedUser.name || storedUser.fullName || 'User'
+        })
+
+        const groups = await getMyGroups()
+
+        if (!groups || groups.length === 0) {
+          setError('You are not a member of any group.')
+          return
+        }
+
+        const currentGroupId = groups[0].group_id
+        setGroupId(currentGroupId)
+
+        const [groupMembers, assignments] = await Promise.all([
+          getGroupMembers(currentGroupId),
+          getDailyAssignments(currentGroupId)
+        ])
+
+        setMembers(groupMembers)
+        setChores(formatAssignments(assignments))
+
+        const defaultMember = groupMembers.find(
+          (member) => Number(member.user_id) !== userId
+        )
+
+        setAssignedTo(
+          defaultMember ? String(defaultMember.user_id) : ''
+        )
+      } catch (error) {
+        console.error('Load Chores Error:', error)
+        setError(error.message || 'Failed to load chores.')
+      } finally {
+        setLoading(false)
+      }
     }
 
-    window.addEventListener('sharespaceChoresUpdated', updateChores)
-    window.addEventListener('storage', updateChores)
-
-    return () => {
-      window.removeEventListener('sharespaceChoresUpdated', updateChores)
-      window.removeEventListener('storage', updateChores)
-    }
+    loadChoresData()
   }, [])
 
   // Calculate chore summary
@@ -68,94 +138,98 @@ function Chores() {
     return chore.status === filter
   })
 
-  // Save updated chores
-  const updateChoreList = (updatedChores) => {
-    setChores(updatedChores)
-    saveChores(updatedChores)
-  }
-
-  // Add a new chore
-  const addChore = (e) => {
+  // Add a new chore and assign it
+  const addChore = async (e) => {
     e.preventDefault()
 
-    const newChore = {
-      id: Date.now(),
-      title,
-      description,
-      assignedTo,
-      createdBy: CURRENT_USER,
-      secondaryVerifier,
-      dueDate,
-      priority,
-      status: 'Pending',
-      submittedBy: '',
-      submittedAt: '',
-      approvedBy: '',
-      approvedAt: ''
+    try {
+      setError('')
+
+      if (!groupId || !assignedTo) {
+        throw new Error('Please select a group member.')
+      }
+
+      const choreResponse = await createChore({
+        groupId,
+        choreName: title.trim(),
+        description: description.trim(),
+        verifierId: secondaryVerifier
+          ? Number(secondaryVerifier)
+          : null
+      })
+
+      const choreId = choreResponse.chore.chore_id
+
+      const today = new Date()
+
+      const assignedDate = [
+        today.getFullYear(),
+        String(today.getMonth() + 1).padStart(2, '0'),
+        String(today.getDate()).padStart(2, '0')
+      ].join('-')
+
+      await assignChore({
+        choreId,
+        assignedTo: Number(assignedTo),
+        assignedDate,
+        dueDate,
+        priority
+      })
+
+      const assignments = await getDailyAssignments(groupId)
+
+      setChores(formatAssignments(assignments))
+
+      setTitle('')
+      setDescription('')
+      setSecondaryVerifier('')
+      setDueDate('')
+      setPriority('Medium')
+      setShowForm(false)
+
+    } catch (error) {
+      console.error('Add Chore Error:', error)
+      setError(error.message || 'Failed to add chore.')
     }
-
-    updateChoreList([...chores, newChore])
-
-    setTitle('')
-    setDescription('')
-    setAssignedTo('Rahul')
-    setSecondaryVerifier('')
-    setDueDate('')
-    setPriority('Medium')
-    setShowForm(false)
   }
 
   // Assigned member submits chore for verification
-  const submitForVerification = (id) => {
-    const updatedChores = chores.map((chore) => {
-      if (
-        chore.id === id &&
-        chore.assignedTo === CURRENT_USER &&
-        chore.status === 'Pending'
-      ) {
-        return {
-          ...chore,
-          status: 'Awaiting Verification',
-          submittedBy: CURRENT_USER,
-          submittedAt: new Date().toLocaleString('en-IN')
-        }
-      }
+  const submitForVerification = async (id) => {
+    try {
+      setError('')
 
-      return chore
-    })
+      await submitChoreForVerification(id)
 
-    updateChoreList(updatedChores)
+      const assignments = await getDailyAssignments(groupId)
+
+      setChores(formatAssignments(assignments))
+    } catch (error) {
+      console.error('Submit Chore Error:', error)
+      setError(error.message || 'Failed to submit chore.')
+    }
   }
 
   // Creator or secondary verifier approves chore
-  const approveChore = (id) => {
-    const updatedChores = chores.map((chore) => {
-      const canApprove =
-        chore.createdBy === CURRENT_USER ||
-        chore.secondaryVerifier === CURRENT_USER
+  const approveChore = async (id) => {
+    try {
+      setError('')
 
-      if (
-        chore.id === id &&
-        chore.status === 'Awaiting Verification' &&
-        canApprove
-      ) {
-        return {
-          ...chore,
-          status: 'Completed',
-          approvedBy: CURRENT_USER,
-          approvedAt: new Date().toLocaleString('en-IN')
-        }
-      }
+      await approveChoreAPI(id)
 
-      return chore
-    })
+      const assignments = await getDailyAssignments(groupId)
 
-    updateChoreList(updatedChores)
+      setChores(formatAssignments(assignments))
+    } catch (error) {
+      console.error('Approve Chore Error:', error)
+      setError(error.message || 'Failed to approve chore.')
+    }
   }
 
   // Format date
   const formatDate = (date) => {
-    return new Date(date + 'T00:00:00').toLocaleDateString('en-IN', {
+    if (!date) return 'Not set'
+
+    return new Date(date).toLocaleDateString('en-IN', {
       day: 'numeric',
       month: 'short',
       year: 'numeric'
@@ -180,7 +254,8 @@ function Chores() {
 
         <button
           onClick={() => setShowForm(true)}
-          className="flex items-center justify-center gap-2 bg-green-600 text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-green-700 transition"
+          disabled={loading || !groupId}
+          className="flex items-center justify-center gap-2 bg-green-600 text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-green-700 transition disabled:opacity-50"
         >
           <Plus size={18} />
           Add Chore
@@ -188,6 +263,12 @@ function Chores() {
 
       </div>
 
+      {/* Error Message */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-600 rounded-lg p-3 text-sm">
+          {error}
+        </div>
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
@@ -210,7 +291,6 @@ function Chores() {
           </div>
         </div>
 
-
         <div className="bg-white border border-gray-200 rounded-xl p-5">
           <div className="flex items-center justify-between">
             <div>
@@ -228,7 +308,6 @@ function Chores() {
             </div>
           </div>
         </div>
-
 
         <div className="bg-white border border-gray-200 rounded-xl p-5">
           <div className="flex items-center justify-between">
@@ -250,7 +329,6 @@ function Chores() {
 
       </div>
 
-
       {/* Chores List */}
       <div className="bg-white border border-gray-200 rounded-xl p-6">
 
@@ -269,42 +347,44 @@ function Chores() {
           <div className="flex flex-wrap items-center gap-2">
 
             {['All', 'Pending', 'Awaiting Verification', 'Completed'].map((item) => (
-
               <button
                 key={item}
                 onClick={() => setFilter(item)}
-                className={`px-3 py-2 rounded-lg text-xs font-semibold transition ${
-                  filter === item
+                className={`px-3 py-2 rounded-lg text-xs font-semibold transition ${filter === item
                     ? 'bg-green-600 text-white'
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
+                  }`}
               >
                 {item}
               </button>
-
             ))}
 
           </div>
 
         </div>
 
-
         {/* Chore Cards */}
         <div className="space-y-4">
 
-          {filteredChores.length > 0 ? (
+          {loading ? (
+
+            <p className="text-center py-12 text-gray-500">
+              Loading chores...
+            </p>
+
+          ) : filteredChores.length > 0 ? (
 
             filteredChores.map((chore) => {
 
               const canSubmit =
-                chore.assignedTo === CURRENT_USER &&
+                Number(chore.assignedTo) === currentUser?.id &&
                 chore.status === 'Pending'
 
               const canApprove =
                 chore.status === 'Awaiting Verification' &&
                 (
-                  chore.createdBy === CURRENT_USER ||
-                  chore.secondaryVerifier === CURRENT_USER
+                  Number(chore.createdBy) === currentUser?.id ||
+                  Number(chore.secondaryVerifier) === currentUser?.id
                 )
 
               return (
@@ -319,13 +399,12 @@ function Chores() {
                     {/* Chore Details */}
                     <div className="flex items-start gap-3">
 
-                      <div className={`p-3 rounded-lg ${
-                        chore.status === 'Completed'
+                      <div className={`p-3 rounded-lg ${chore.status === 'Completed'
                           ? 'bg-green-100 text-green-600'
                           : chore.status === 'Awaiting Verification'
-                          ? 'bg-blue-100 text-blue-600'
-                          : 'bg-orange-100 text-orange-600'
-                      }`}>
+                            ? 'bg-blue-100 text-blue-600'
+                            : 'bg-orange-100 text-orange-600'
+                        }`}>
                         <ClipboardList size={22} />
                       </div>
 
@@ -342,7 +421,7 @@ function Chores() {
 
                           <span className="flex items-center gap-1.5 text-xs text-gray-500">
                             <User size={14} />
-                            Assigned to: {chore.assignedTo}
+                            Assigned to: {chore.assignedToName}
                           </span>
 
                           <span className="flex items-center gap-1.5 text-xs text-gray-500">
@@ -353,21 +432,22 @@ function Chores() {
                         </div>
 
                         <div className="text-xs text-gray-500 mt-2">
-                          Created by: {chore.createdBy}
-                          {chore.secondaryVerifier && (
-                            <span> | Verifier: {chore.secondaryVerifier}</span>
+                          Created by: {chore.createdByName}
+
+                          {chore.verifierName && (
+                            <span> | Verifier: {chore.verifierName}</span>
                           )}
                         </div>
 
                         {chore.status === 'Awaiting Verification' && (
                           <p className="text-xs text-blue-600 mt-2">
-                            Submitted by {chore.submittedBy} for verification.
+                            Submitted by {chore.assignedToName} for verification.
                           </p>
                         )}
 
                         {chore.status === 'Completed' && (
                           <p className="text-xs text-green-600 mt-2">
-                            Approved by {chore.approvedBy}
+                            Approved by {chore.approvedByName}
                           </p>
                         )}
 
@@ -375,27 +455,24 @@ function Chores() {
 
                     </div>
 
-
                     {/* Priority, Status and Action */}
                     <div className="flex flex-wrap items-center gap-3 md:justify-end">
 
-                      <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${
-                        chore.priority === 'High'
+                      <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${chore.priority === 'High'
                           ? 'bg-red-100 text-red-600'
                           : chore.priority === 'Medium'
-                          ? 'bg-yellow-100 text-yellow-700'
-                          : 'bg-blue-100 text-blue-600'
-                      }`}>
+                            ? 'bg-yellow-100 text-yellow-700'
+                            : 'bg-blue-100 text-blue-600'
+                        }`}>
                         {chore.priority} Priority
                       </span>
 
-                      <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${
-                        chore.status === 'Completed'
+                      <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${chore.status === 'Completed'
                           ? 'bg-green-100 text-green-700'
                           : chore.status === 'Awaiting Verification'
-                          ? 'bg-blue-100 text-blue-700'
-                          : 'bg-orange-100 text-orange-600'
-                      }`}>
+                            ? 'bg-blue-100 text-blue-700'
+                            : 'bg-orange-100 text-orange-600'
+                        }`}>
                         {chore.status}
                       </span>
 
@@ -419,11 +496,13 @@ function Chores() {
                         </button>
                       )}
 
-                      {chore.status === 'Awaiting Verification' && !canApprove && chore.assignedTo !== CURRENT_USER && (
-                        <span className="text-xs text-gray-400">
-                          Waiting for approval
-                        </span>
-                      )}
+                      {chore.status === 'Awaiting Verification' &&
+                        !canApprove &&
+                        Number(chore.assignedTo) !== currentUser?.id && (
+                          <span className="text-xs text-gray-400">
+                            Waiting for approval
+                          </span>
+                        )}
 
                     </div>
 
@@ -457,7 +536,6 @@ function Chores() {
 
       </div>
 
-
       {/* Add Chore Popup */}
       {showForm && (
 
@@ -480,7 +558,6 @@ function Chores() {
               Create a household task and assign it to a member.
             </p>
 
-
             <form onSubmit={addChore} className="space-y-4">
 
               <div>
@@ -498,7 +575,6 @@ function Chores() {
                 />
               </div>
 
-
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Description
@@ -514,7 +590,6 @@ function Chores() {
                 />
               </div>
 
-
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Assign To
@@ -529,18 +604,26 @@ function Chores() {
                       setSecondaryVerifier('')
                     }
                   }}
+                  required
                   className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm outline-none focus:border-green-500 bg-white"
                 >
+                  <option value="">Select a member</option>
+
                   {members
-                    .filter((member) => member !== CURRENT_USER)
+                    .filter(
+                      (member) =>
+                        Number(member.user_id) !== currentUser?.id
+                    )
                     .map((member) => (
-                      <option key={member} value={member}>
-                        {member}
+                      <option
+                        key={member.user_id}
+                        value={member.user_id}
+                      >
+                        {member.name || member.full_name || member.user_name}
                       </option>
                     ))}
                 </select>
               </div>
-
 
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -555,12 +638,17 @@ function Chores() {
                   <option value="">No Secondary Verifier</option>
 
                   {members
-                    .filter((member) =>
-                      member !== CURRENT_USER && member !== assignedTo
+                    .filter(
+                      (member) =>
+                        Number(member.user_id) !== currentUser?.id &&
+                        String(member.user_id) !== String(assignedTo)
                     )
                     .map((member) => (
-                      <option key={member} value={member}>
-                        {member}
+                      <option
+                        key={member.user_id}
+                        value={member.user_id}
+                      >
+                        {member.name || member.full_name || member.user_name}
                       </option>
                     ))}
                 </select>
@@ -569,7 +657,6 @@ function Chores() {
                   The creator or this roommate can approve the chore.
                 </p>
               </div>
-
 
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -584,7 +671,6 @@ function Chores() {
                   className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm outline-none focus:border-green-500"
                 />
               </div>
-
 
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -601,7 +687,6 @@ function Chores() {
                   <option value="High">High</option>
                 </select>
               </div>
-
 
               <div className="flex items-center gap-3 pt-3">
 

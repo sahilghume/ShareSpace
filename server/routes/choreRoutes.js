@@ -12,6 +12,8 @@ const {
   assignChore,
   getDailyAssignments,
   updateChoreStatus,
+  submitChoreForVerification,
+  approveChore,
 } = require("../controllers/choreController");
 
 router.use(authMiddleware);
@@ -22,6 +24,8 @@ router.get("/group/:groupId", getGroupChores);
 router.get("/assignments/:groupId", getDailyAssignments);
 router.post("/assign", assignChore);
 router.patch("/assignments/:id/status", updateChoreStatus);
+router.patch("/assignments/:id/submit", submitChoreForVerification);
+router.patch("/assignments/:id/approve", approveChore);
 router.get("/:id", getChoreById);
 router.put("/:id", updateChore);
 router.delete("/:id", deleteChore);
