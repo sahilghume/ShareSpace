@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 
 import {
   Wallet,
@@ -12,9 +13,70 @@ import {
   Users,
   Heart,
   Sparkles,
+  Bell,
+  ShieldCheck,
+  CheckCircle,
 } from "lucide-react";
 
+import {
+  CURRENT_USER,
+  getChores
+} from "../services/choreStorage";
+
+import {
+  getShoppingItems
+} from "../services/shoppingStorage";
+
 function Dashboard() {
+
+  const [chores, setChores] = useState(() => getChores());
+  const [shoppingItems, setShoppingItems] = useState(() => getShoppingItems());
+
+  // Listen for chore and shopping list updates
+  useEffect(() => {
+    const updateChores = () => {
+      setChores(getChores());
+    };
+
+    const updateShoppingItems = () => {
+      setShoppingItems(getShoppingItems());
+    };
+
+    window.addEventListener("sharespaceChoresUpdated", updateChores);
+    window.addEventListener("storage", updateChores);
+
+    window.addEventListener("sharespaceShoppingUpdated", updateShoppingItems);
+    window.addEventListener("storage", updateShoppingItems);
+
+    return () => {
+      window.removeEventListener("sharespaceChoresUpdated", updateChores);
+      window.removeEventListener("storage", updateChores);
+
+      window.removeEventListener("sharespaceShoppingUpdated", updateShoppingItems);
+      window.removeEventListener("storage", updateShoppingItems);
+    };
+  }, []);
+
+  // Notifications for chore creators and secondary verifiers
+  const choreNotifications = chores.filter(
+    (chore) =>
+      (
+        chore.createdBy === CURRENT_USER ||
+        chore.secondaryVerifier === CURRENT_USER
+      ) &&
+      chore.status === "Awaiting Verification"
+  );
+
+  // Notifications for shopping item creators and secondary verifiers
+  const shoppingNotifications = shoppingItems.filter(
+    (item) =>
+      (
+        item.createdBy === CURRENT_USER ||
+        item.secondaryVerifier === CURRENT_USER
+      ) &&
+      item.status === "Awaiting Verification"
+  );
+
   // Dashboard Summary Data
   const summaryCards = [
     {
@@ -172,6 +234,7 @@ function Dashboard() {
 
   return (
     <div className="space-y-8">
+
       {/* Welcome Section */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -188,6 +251,7 @@ function Dashboard() {
           <span className="text-sm font-medium">Green Valley Flat</span>
         </div>
       </div>
+
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
@@ -218,6 +282,208 @@ function Dashboard() {
           );
         })}
       </div>
+
+
+      {/* Verification Notifications - Two Equal Sections */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+
+        {/* Chore Verification Notifications */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+
+          <div className="p-5 border-b border-gray-100">
+            <div className="flex items-center gap-3">
+
+              <div className="bg-orange-100 text-orange-600 p-3 rounded-lg">
+                <Bell size={22} />
+              </div>
+
+              <div className="min-w-0">
+                <h2 className="text-lg font-bold text-gray-800">
+                  Chore Verification Notifications
+                </h2>
+
+                <p className="text-sm text-gray-500 mt-1">
+                  Chores waiting for your approval.
+                </p>
+              </div>
+
+              {choreNotifications.length > 0 && (
+                <span className="ml-auto shrink-0 bg-red-100 text-red-600 text-xs font-bold px-3 py-1 rounded-full">
+                  {choreNotifications.length} New
+                </span>
+              )}
+
+            </div>
+          </div>
+
+
+          <div className="p-5 space-y-4">
+
+            {choreNotifications.length > 0 ? (
+
+              choreNotifications.map((chore) => (
+
+                <div
+                  key={chore.id}
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-orange-100 bg-orange-50 rounded-lg p-4"
+                >
+
+                  <div className="flex items-start gap-3 min-w-0">
+
+                    <div className="bg-white text-orange-600 p-2 rounded-lg shrink-0">
+                      <ShieldCheck size={21} />
+                    </div>
+
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-gray-800 break-words">
+                        {chore.title}
+                      </p>
+
+                      <p className="text-sm text-gray-600 mt-1">
+                        {chore.submittedBy} has submitted this chore for verification.
+                      </p>
+
+                      <p className="text-xs text-gray-400 mt-2">
+                        Assigned to: {chore.assignedTo}
+                      </p>
+                    </div>
+
+                  </div>
+
+                  <Link
+                    to="/chores"
+                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-semibold text-center transition-colors shrink-0"
+                  >
+                    Verify Chore
+                  </Link>
+
+                </div>
+
+              ))
+
+            ) : (
+
+              <div className="text-center py-6">
+                <CheckCircle
+                  size={35}
+                  className="mx-auto text-green-500 mb-2"
+                />
+
+                <p className="text-sm font-semibold text-gray-700">
+                  No pending chore verifications
+                </p>
+
+                <p className="text-xs text-gray-400 mt-1">
+                  You're all caught up!
+                </p>
+              </div>
+
+            )}
+
+          </div>
+
+        </div>
+
+
+        {/* Shopping List Verification Notifications */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+
+          <div className="p-5 border-b border-gray-100">
+            <div className="flex items-center gap-3">
+
+              <div className="bg-green-100 text-green-600 p-3 rounded-lg">
+                <ShoppingBasket size={22} />
+              </div>
+
+              <div className="min-w-0">
+                <h2 className="text-lg font-bold text-gray-800">
+                  Shopping List Verification Notifications
+                </h2>
+
+                <p className="text-sm text-gray-500 mt-1">
+                  Purchases waiting for your approval.
+                </p>
+              </div>
+
+              {shoppingNotifications.length > 0 && (
+                <span className="ml-auto shrink-0 bg-red-100 text-red-600 text-xs font-bold px-3 py-1 rounded-full">
+                  {shoppingNotifications.length} New
+                </span>
+              )}
+
+            </div>
+          </div>
+
+
+          <div className="p-5 space-y-4">
+
+            {shoppingNotifications.length > 0 ? (
+
+              shoppingNotifications.map((item) => (
+
+                <div
+                  key={item.id}
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-green-100 bg-green-50 rounded-lg p-4"
+                >
+
+                  <div className="flex items-start gap-3 min-w-0">
+
+                    <div className="bg-white text-green-600 p-2 rounded-lg shrink-0">
+                      <ShieldCheck size={21} />
+                    </div>
+
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-gray-800 break-words">
+                        {item.title}
+                      </p>
+
+                      <p className="text-sm text-gray-600 mt-1">
+                        {item.submittedBy} has submitted this purchase for verification.
+                      </p>
+
+                      <p className="text-xs text-gray-400 mt-2">
+                        Assigned to: {item.assignedTo}
+                      </p>
+                    </div>
+
+                  </div>
+
+                  <Link
+                    to="/shopping-list"
+                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-semibold text-center transition-colors shrink-0"
+                  >
+                    Verify Purchase
+                  </Link>
+
+                </div>
+
+              ))
+
+            ) : (
+
+              <div className="text-center py-6">
+                <CheckCircle
+                  size={35}
+                  className="mx-auto text-green-500 mb-2"
+                />
+
+                <p className="text-sm font-semibold text-gray-700">
+                  No pending shopping verifications
+                </p>
+
+                <p className="text-xs text-gray-400 mt-1">
+                  You're all caught up!
+                </p>
+              </div>
+
+            )}
+
+          </div>
+
+        </div>
+
+      </div>
+
 
       {/* Notice Board */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
@@ -294,8 +560,10 @@ function Dashboard() {
         </form>
       </div>
 
+
       {/* Recent Expenses and Pending Payments */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+
         {/* Recent Expenses */}
         <div className="xl:col-span-2 bg-white rounded-xl border border-gray-200 shadow-sm">
           <div className="flex items-center justify-between p-5 border-b border-gray-100">
@@ -359,6 +627,7 @@ function Dashboard() {
           </div>
         </div>
 
+
         {/* Pending Payments */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
           <div className="p-5 border-b border-gray-100">
@@ -404,7 +673,9 @@ function Dashboard() {
             </button>
           </div>
         </div>
+
       </div>
+
 
       {/* Upcoming Chores */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
@@ -465,8 +736,10 @@ function Dashboard() {
         </div>
       </div>
 
+
       {/* Bottom Section: Two Equal Cards */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+
         {/* Shared Shopping List */}
         <div className="bg-white rounded-xl p-6 text-black flex flex-col justify-between border border-gray-200">
           <div>
@@ -481,10 +754,14 @@ function Dashboard() {
             </p>
           </div>
 
-          <button className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-green-700 w-fit">
+          <Link
+            to="/shopping-list"
+            className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-green-700 w-fit"
+          >
             Manage Shopping List
-          </button>
+          </Link>
         </div>
+
 
         {/* Roommate Community Card */}
         <div className="bg-white border border-green-100 rounded-xl p-6 flex items-center justify-between gap-4 overflow-hidden">
@@ -528,7 +805,9 @@ function Dashboard() {
             </div>
           </div>
         </div>
+
       </div>
+
     </div>
   );
 }
