@@ -212,10 +212,7 @@ const updateExpense = async (req, res) => {
     }
 
     // Only payer or admin can update
-    if (
-      Number(expense.paid_by) !== Number(userId) &&
-      member.admin !== "admin"
-    ) {
+    if (Number(expense.paid_by) !== Number(userId) && member.role !== "admin") {
       return res.status(403).json({
         success: false,
         message: "Only the payer or group admin can update this expense",
@@ -304,10 +301,7 @@ const deleteExpense = async (req, res) => {
     }
 
     // Only payer or admin can delete
-    if (
-      Number(expense.paid_by) !== Number(userId) &&
-      member.admin !== "admin"
-    ) {
+    if (Number(expense.paid_by) !== Number(userId) && member.role !== "admin") {
       return res.status(403).json({
         success: false,
         message: "Only the payer or group admin can delete this expense",
