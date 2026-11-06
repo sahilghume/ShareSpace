@@ -268,14 +268,154 @@ function updateAssignmentStatus(assignmentId, status) {
   });
 }
 
+
+function submitForVerification(assignmentId, userId) {
+
+    return new Promise((resolve, reject) => {
+
+        const sql = `
+            UPDATE daily_chore_assignments
+            SET status = 'Awaiting Verification',
+                submitted_at = NOW()
+            WHERE assignment_id = ?
+            AND assigned_to = ?
+            AND status = 'Pending'
+        `;
+
+        sqlConnectionPool.query(
+            sql,
+            [assignmentId, userId],
+            (err, result) => {
+
+                if (err) {
+                    return reject(err);
+                }
+
+                if (result.affectedRows === 0) {
+                    return reject(
+                        new Error("Invalid assignment or unauthorized submission")
+                    );
+                }
+
+                resolve({
+                    message: "Chore submitted for verification successfully"
+                });
+            }
+        );
+    });
+}
+
+
+function getPendingVerifications(userId) {
+
+    return new Promise((resolve, reject) => {
+
+        const sql = `
+            SELECT
+                da.assignment_id,
+                da.chore_id,
+                da.group_id,
+                da.assigned_to,
+                da.assigned_date,
+                da.due_date,
+                da.priority,
+                da.status,
+                da.submitted_at,
+                c.chore_name,
+                c.created_by,
+                c.verifier_id,
+                u.name AS assigned_to_name
+
+            FROM daily_chore_assignments da
+
+            JOIN chores c
+                ON da.chore_id = c.chore_id
+
+            JOIN users u
+                ON da.assigned_to = u.user_id
+
+            WHERE da.status = 'Awaiting Verification'
+            AND (
+                c.created_by = ?
+                OR c.verifier_id = ?
+            )
+
+            ORDER BY da.submitted_at DESC
+        `;
+
+        sqlConnectionPool.query(
+            sql,
+            [userId, userId],
+            (err, result) => {
+
+                if (err) return reject(err);
+
+                resolve(result);
+            }
+        );
+    });
+}
+
+
+function approveChore(assignmentId, verifierId) {
+
+    return new Promise((resolve, reject) => {
+
+        const sql = `
+            UPDATE daily_chore_assignments da
+
+            JOIN chores c
+                ON da.chore_id = c.chore_id
+
+            SET
+                da.status = 'Completed',
+                da.verified_by = ?,
+                da.verified_at = NOW()
+
+            WHERE da.assignment_id = ?
+            AND da.status = 'Awaiting Verification'
+            AND (
+                c.created_by = ?
+                OR c.verifier_id = ?
+            )
+        `;
+
+        sqlConnectionPool.query(
+            sql,
+            [verifierId, assignmentId, verifierId, verifierId],
+            (err, result) => {
+
+                if (err) return reject(err);
+
+                if (result.affectedRows === 0) {
+                    return reject(
+                        new Error(
+                            "Invalid assignment or unauthorized verification"
+                        )
+                    );
+                }
+
+                resolve({
+                    message: "Chore approved successfully"
+                });
+            }
+        );
+    });
+}
+
 module.exports = {
-  createChore,
-  findById,
-  getGroupChores,
-  updateChore,
-  deleteChore,
-  createAssignment,
-  getDailyAssignments,
-  findAssignment,
-  updateAssignmentStatus,
-};
+    createChore,
+    findById,
+    getGroupChores,
+    updateChore,
+    deleteChore,
+    createAssignment,
+    getDailyAssignments,
+    findAssignment,
+    updateAssignmentStatus,
+    submitForVerification,
+    getPendingVerifications,
+    approveChore
+}
+
+
