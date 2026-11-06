@@ -1,43 +1,32 @@
 const sqlConnectionPool = require("../config/db");
 
 function createNotice(data) {
+  const { group_id, posted_by, title, message } = data;
 
-    const {
-        group_id,
-        posted_by,
-        title,
-        message
-    } = data;
-
-    const sql = `
+  const sql = `
         INSERT INTO group_notices
         (group_id, posted_by, title, message)
         VALUES (?, ?, ?, ?)
     `;
 
-    return new Promise((resolve, reject) => {
+  return new Promise((resolve, reject) => {
+    sqlConnectionPool.query(
+      sql,
+      [group_id, posted_by, title, message],
+      (err, result) => {
+        if (err) return reject(err);
 
-        sqlConnectionPool.query(
-            sql,
-            [group_id, posted_by, title, message],
-            (err, result) => {
-
-                if (err) return reject(err);
-
-                resolve({
-                    notice_id: result.insertId,
-                    message: "Notice created successfully"
-                });
-            }
-        );
-    });
+        resolve({
+          notice_id: result.insertId,
+          message: "Notice created successfully",
+        });
+      },
+    );
+  });
 }
 
-
-
 function getGroupNotices(groupId) {
-
-    const sql = `
+  const sql = `
         SELECT
             n.notice_id,
             n.group_id,
@@ -52,21 +41,17 @@ function getGroupNotices(groupId) {
         ORDER BY n.created_at DESC
     `;
 
-    return new Promise((resolve, reject) => {
+  return new Promise((resolve, reject) => {
+    sqlConnectionPool.query(sql, [groupId], (err, result) => {
+      if (err) return reject(err);
 
-        sqlConnectionPool.query(sql, [groupId], (err, result) => {
-
-            if (err) return reject(err);
-
-            resolve(result);
-        });
+      resolve(result);
     });
+  });
 }
 
-
 function findById(noticeId) {
-
-    const sql = `
+  const sql = `
         SELECT
             n.notice_id,
             n.group_id,
@@ -80,89 +65,85 @@ function findById(noticeId) {
         WHERE n.notice_id = ?
     `;
 
-    return new Promise((resolve, reject) => {
+  return new Promise((resolve, reject) => {
+    sqlConnectionPool.query(sql, [noticeId], (err, result) => {
+      if (err) return reject(err);
 
-        sqlConnectionPool.query(sql, [noticeId], (err, result) => {
+      if (result.length === 0) {
+        return resolve(null);
+      }
 
-            if (err) return reject(err);
-
-            if (result.length === 0) {
-                return resolve(null);
-            }
-
-            resolve(result[0]);
-        });
+      resolve(result[0]);
     });
+  });
 }
 
-
 function updateNotice(noticeId, data) {
+  const fields = [];
+  const values = [];
 
-    const {
-        title,
-        message
-    } = data;
+  if (data.title !== undefined) {
+    fields.push("title = ?");
+    values.push(data.title);
+  }
 
-    const sql = `
+  if (data.message !== undefined) {
+    fields.push("message = ?");
+    values.push(data.message);
+  }
+
+  if (fields.length === 0) {
+    return Promise.resolve({
+      message: "No fields to update",
+    });
+  }
+
+  const sql = `
         UPDATE group_notices
-        SET title = ?, message = ?
+        SET ${fields.join(", ")}
         WHERE notice_id = ?
     `;
 
-    return new Promise((resolve, reject) => {
+  values.push(noticeId);
 
-        sqlConnectionPool.query(
-            sql,
-            [title, message, noticeId],
-            (err, result) => {
+  return new Promise((resolve, reject) => {
+    sqlConnectionPool.query(sql, values, (err) => {
+      if (err) return reject(err);
 
-                if (err) return reject(err);
-
-                if (result.affectedRows === 0) {
-                    return resolve({
-                        message: "Notice not found"
-                    });
-                }
-
-                resolve({
-                    message: "Notice updated successfully"
-                });
-            }
-        );
+      resolve({
+        message: "Notice updated successfully",
+      });
     });
+  });
 }
 
-
 function deleteNotice(noticeId) {
-
-    const sql = `
+  const sql = `
         DELETE FROM group_notices
         WHERE notice_id = ?
     `;
 
-    return new Promise((resolve, reject) => {
+  return new Promise((resolve, reject) => {
+    sqlConnectionPool.query(sql, [noticeId], (err, result) => {
+      if (err) return reject(err);
 
-        sqlConnectionPool.query(sql, [noticeId], (err, result) => {
-
-            if (err) return reject(err);
-
-            if (result.affectedRows === 0) {
-                return resolve({
-                    message: "Notice not found"
-                });
-            }
-
-            resolve({
-                message: "Notice deleted successfully"
-            });
+      if (result.affectedRows === 0) {
+        return resolve({
+          message: "Notice not found",
         });
+      }
+
+      resolve({
+        message: "Notice deleted successfully",
+      });
     });
+  });
 }
 
 module.exports = {
-    createNotice,
-    getGroupNotices,
-    findById,
-    updateNotice,
-    deleteNotice
-}
+  createNotice,
+  getGroupNotices,
+  findById,
+  updateNotice,
+  deleteNotice,
+};

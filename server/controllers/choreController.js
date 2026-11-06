@@ -4,7 +4,7 @@ const Group = require("../models/Group");
 // 1. Create chore
 const createChore = async (req, res) => {
   try {
-    const { groupId, choreName, description } = req.body;
+    const { groupId, choreName, description, verifierId } = req.body;
     const userId = req.user.id;
 
     if (!groupId || !choreName || !choreName.trim()) {
@@ -16,17 +16,34 @@ const createChore = async (req, res) => {
 
     const member = await Group.findMember(groupId, userId);
 
-    if (!member || member.admin !== "admin") {
+    if (!member || member.role !== "admin") {
       return res.status(403).json({
         success: false,
         message: "Only group admin can create chores",
       });
     }
 
+    let verifierIdValue = null;
+
+    if (verifierId) {
+      const verifier = await Group.findMember(groupId, verifierId);
+
+      if (!verifier) {
+        return res.status(400).json({
+          success: false,
+          message: "Verifier must be a member of this group",
+        });
+      }
+
+      verifierIdValue = verifierId;
+    }
+
     const chore = await Chore.createChore({
       group_id: groupId,
       chore_name: choreName.trim(),
       description: description || null,
+      created_by: userId,
+      verifier_id: verifierIdValue,
     });
 
     return res.status(201).json({
@@ -129,7 +146,7 @@ const updateChore = async (req, res) => {
 
     const member = await Group.findMember(chore.group_id, userId);
 
-    if (!member || member.admin !== "admin") {
+    if (!member || member.role !== "admin") {
       return res.status(403).json({
         success: false,
         message: "Only group admin can update chores",
@@ -203,7 +220,7 @@ const deleteChore = async (req, res) => {
 
     const member = await Group.findMember(chore.group_id, userId);
 
-    if (!member || member.admin !== "admin") {
+    if (!member || member.role !== "admin") {
       return res.status(403).json({
         success: false,
         message: "Only group admin can delete chores",
@@ -249,7 +266,7 @@ const assignChore = async (req, res) => {
 
     const admin = await Group.findMember(chore.group_id, userId);
 
-    if (!admin || admin.admin !== "admin") {
+    if (!admin || admin.role !== "admin") {
       return res.status(403).json({
         success: false,
         message: "Only group admin can assign chores",
@@ -364,7 +381,7 @@ const updateChoreStatus = async (req, res) => {
     // Only assigned member or admin can update status
     if (
       Number(assignment.assigned_to) !== Number(userId) &&
-      member.admin !== "admin"
+      member.role !== "admin"
     ) {
       return res.status(403).json({
         success: false,

@@ -136,10 +136,14 @@ const updateNotice = async (req, res) => {
 
     const member = await Group.findMember(notice.group_id, userId);
 
-    if (!member) {
+    if (
+      !member ||
+      (Number(notice.posted_by) !== Number(userId) && member.role !== "admin")
+    ) {
       return res.status(403).json({
         success: false,
-        message: "You are not a member of this group",
+        message:
+          "Only the notice creator or group admin can update this notice",
       });
     }
 
@@ -206,10 +210,14 @@ const deleteNotice = async (req, res) => {
 
     const member = await Group.findMember(notice.group_id, userId);
 
-    if (!member) {
+    if (
+      !member ||
+      (Number(notice.posted_by) !== Number(userId) && member.role !== "admin")
+    ) {
       return res.status(403).json({
         success: false,
-        message: "You are not a member of this group",
+        message:
+          "Only the notice creator or group admin can delete this notice",
       });
     }
 
