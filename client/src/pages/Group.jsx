@@ -1,5 +1,6 @@
 
-import { useState } from 'react'
+import { useState, useEffect } from "react";
+
 import {
   Users,
   MapPin,
@@ -10,82 +11,137 @@ import {
   Mail,
   LogOut,
   AlertTriangle,
-  X
-} from 'lucide-react'
+  X,
+} from "lucide-react";
+
+import {
+  getMyGroups,
+  getGroupDetails,
+  getGroupMembers,
+  leaveGroup,
+  transferAdminAndLeave,
+} from "../services/groupService";
 
 function Group() {
+  const [copied, setCopied] = useState(false);
+  const [showLeavePopup, setShowLeavePopup] = useState(false);
 
-  const [copied, setCopied] = useState(false)
-  const [showLeavePopup, setShowLeavePopup] = useState(false)
+  const [group, setGroup] = useState(null);
+  const [members, setMembers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [selectedAdminId, setSelectedAdminId] = useState("");
+  const [isLeaving, setIsLeaving] = useState(false);
 
-  // Sample group details
-  const group = {
-    name: 'Happy Home',
-    description: 'A place where roommates live better together.',
-    address: 'Kharghar, Navi Mumbai',
-    createdOn: '15 September 2026',
-    inviteCode: 'SHARE123'
-  }
+  const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
+  const currentUserId = currentUser.user_id || currentUser.id;
 
-  // Sample group members
-  const members = [
-    {
-      id: 1,
-      name: 'Rohit Katkar',
-      email: 'rohit@example.com',
-      role: 'Admin',
-      initials: 'RK'
-    },
-    {
-      id: 2,
-      name: 'Rahul Sharma',
-      email: 'rahul@example.com',
-      role: 'Member',
-      initials: 'RS'
-    },
-    {
-      id: 3,
-      name: 'Amit Patil',
-      email: 'amit@example.com',
-      role: 'Member',
-      initials: 'AP'
-    },
-    {
-      id: 4,
-      name: 'Priya Deshmukh',
-      email: 'priya@example.com',
-      role: 'Member',
-      initials: 'PD'
-    },
-    {
-      id: 5,
-      name: 'Sahil Ghume',
-      email: 'sahil@example.com',
-      role: 'Member',
-      initials: 'SG'
-    },
-    {
-      id: 6,
-      name: 'Arya Tamore',
-      email: 'arya@example.com',
-      role: 'Member',
-      initials: 'AT'
-    }
-  ]
+  const currentMember = members.find(
+    (member) => Number(member.user_id) === Number(currentUserId)
+  );
+
+  const isAdmin = currentMember?.role === "admin";
+
+  const otherMembers = members.filter(
+    (member) => Number(member.user_id) !== Number(currentUserId)
+  );
+
+  // Fetch group details and members
+  useEffect(() => {
+    const fetchGroupData = async () => {
+      try {
+        setLoading(true);
+        setError("");
+
+        const groups = await getMyGroups();
+
+        if (!groups || groups.length === 0) {
+          setGroup(null);
+          return;
+        }
+
+        const groupId = groups[0].group_id;
+
+        const [groupData, membersData] = await Promise.all([
+          getGroupDetails(groupId),
+          getGroupMembers(groupId),
+        ]);
+
+        setGroup(groupData);
+        setMembers(membersData);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchGroupData();
+  }, []);
 
   // Copy invite code
-  const copyInviteCode = () => {
-    navigator.clipboard.writeText(group.inviteCode)
-    setCopied(true)
+  const copyInviteCode = async () => {
+    try {
+      await navigator.clipboard.writeText(group.group_code);
+      setCopied(true);
 
-    setTimeout(() => {
-      setCopied(false)
-    }, 2000)
-  }
+      setTimeout(() => {
+        setCopied(false);
+      }, 2000);
+    } catch (error) {
+      setError("Unable to copy invite code.");
+    }
+  };
 
   // Confirm leave group
-  const confirmLeaveGroup = () => {
-    setShowLeavePopup(false)
+  const confirmLeaveGroup = async () => {
+    try {
+      setIsLeaving(true);
+
+      if (isAdmin) {
+        if (!selectedAdminId) {
+          alert("Please select a member to transfer admin rights.");
+          return;
+        }
+
+        await transferAdminAndLeave(group.group_id, selectedAdminId);
+      } else {
+        await leaveGroup(group.group_id);
+      }
+
+      alert("You have successfully left the group.");
+      setShowLeavePopup(false);
+      window.location.reload();
+
+    } catch (error) {
+      alert(error.message);
+    } finally {
+      setIsLeaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="p-6 text-gray-500">
+        Loading group details...
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-6 text-red-600">
+        {error}
+      </div>
+    );
+  }
+
+  if (!group) {
+    return (
+      <div className="p-6 text-gray-500">
+        You haven't joined any group yet.
+      </div>
+    );
   }
 
   return (
@@ -102,7 +158,6 @@ function Group() {
         </p>
       </div>
 
-
       {/* Group Overview */}
       <div className="bg-white border border-gray-200 rounded-xl p-6">
 
@@ -116,11 +171,11 @@ function Group() {
 
             <div>
               <h2 className="text-xl font-bold text-gray-800">
-                {group.name}
+                {group.group_name}
               </h2>
 
               <p className="text-sm text-gray-500 mt-1">
-                {group.description}
+                Shared space for your group members.
               </p>
             </div>
 
@@ -132,7 +187,6 @@ function Group() {
 
         </div>
 
-
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 mt-6 pt-6 border-t border-gray-100">
 
           <div className="flex items-center gap-3">
@@ -141,7 +195,7 @@ function Group() {
             <div>
               <p className="text-xs text-gray-500">Location</p>
               <p className="text-sm font-semibold text-gray-800">
-                {group.address}
+                Not provided
               </p>
             </div>
           </div>
@@ -152,7 +206,9 @@ function Group() {
             <div>
               <p className="text-xs text-gray-500">Created On</p>
               <p className="text-sm font-semibold text-gray-800">
-                {group.createdOn}
+                {group.created_at
+                  ? new Date(group.created_at).toLocaleDateString("en-IN")
+                  : "Not available"}
               </p>
             </div>
           </div>
@@ -171,7 +227,6 @@ function Group() {
         </div>
 
       </div>
-
 
       {/* Members and Invite Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -195,59 +250,69 @@ function Group() {
 
           </div>
 
-
           {/* Scrollable Members List */}
           <div className="max-h-80 overflow-y-auto space-y-4 pr-2">
 
-            {members.map((member) => (
+            {members.map((member) => {
+              const initials = member.name
+                .split(" ")
+                .map((word) => word[0])
+                .join("")
+                .slice(0, 2)
+                .toUpperCase();
 
-              <div
-                key={member.id}
-                className="flex items-center justify-between gap-3 p-3 rounded-lg border border-gray-100 hover:bg-gray-50"
-              >
+              return (
+                <div
+                  key={member.user_id}
+                  className="flex items-center justify-between gap-3 p-3 rounded-lg border border-gray-100 hover:bg-gray-50"
+                >
 
-                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3">
 
-                  <div className="w-11 h-11 rounded-full bg-green-100 text-green-700 flex items-center justify-center font-bold shrink-0">
-                    {member.initials}
+                    <div className="w-11 h-11 rounded-full bg-green-100 text-green-700 flex items-center justify-center font-bold shrink-0">
+                      {initials}
+                    </div>
+
+                    <div>
+                      <p className="font-semibold text-gray-800 text-sm">
+                        {member.name}
+                      </p>
+
+                      <p className="text-xs text-gray-500">
+                        {member.email}
+                      </p>
+                    </div>
+
                   </div>
 
-                  <div>
-                    <p className="font-semibold text-gray-800 text-sm">
-                      {member.name}
-                    </p>
+                  {member.role === "admin" ? (
 
-                    <p className="text-xs text-gray-500">
-                      {member.email}
-                    </p>
-                  </div>
+                    <span className="flex items-center gap-1 text-xs font-semibold bg-yellow-100 text-yellow-700 px-3 py-1.5 rounded-full">
+                      <Crown size={13} />
+                      Admin
+                    </span>
+
+                  ) : (
+
+                    <span className="text-xs font-semibold bg-gray-100 text-gray-600 px-3 py-1.5 rounded-full">
+                      Member
+                    </span>
+
+                  )}
 
                 </div>
+              );
+            })}
 
-
-                {member.role === 'Admin' ? (
-
-                  <span className="flex items-center gap-1 text-xs font-semibold bg-yellow-100 text-yellow-700 px-3 py-1.5 rounded-full">
-                    <Crown size={13} />
-                    Admin
-                  </span>
-
-                ) : (
-
-                  <span className="text-xs font-semibold bg-gray-100 text-gray-600 px-3 py-1.5 rounded-full">
-                    Member
-                  </span>
-
-                )}
-
-              </div>
-
-            ))}
+            {members.length === 0 && (
+              <p className="text-center text-gray-400 py-6 text-sm">
+                No members found.
+              </p>
+            )}
 
           </div>
 
         </div>
-
 
         {/* Invite Members */}
         <div className="bg-white border border-gray-200 rounded-xl p-6">
@@ -264,7 +329,6 @@ function Group() {
             Share your group invite code with people you want to add.
           </p>
 
-
           <p className="text-xs font-semibold text-gray-500 mb-2">
             GROUP INVITE CODE
           </p>
@@ -272,7 +336,7 @@ function Group() {
           <div className="flex items-center justify-between gap-2 bg-gray-50 border border-gray-200 rounded-lg p-3">
 
             <span className="font-bold tracking-wider text-gray-800">
-              {group.inviteCode}
+              {group.group_code}
             </span>
 
             <button
@@ -285,12 +349,11 @@ function Group() {
 
           </div>
 
-
           <button
             onClick={copyInviteCode}
             className="w-full mt-4 bg-green-600 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-green-700"
           >
-            {copied ? 'Copied!' : 'Copy Invite Code'}
+            {copied ? "Copied!" : "Copy Invite Code"}
           </button>
 
           <p className="text-xs text-gray-400 mt-3">
@@ -300,7 +363,6 @@ function Group() {
         </div>
 
       </div>
-
 
       {/* Leave Group Section */}
       <div className="bg-white border border-red-200 rounded-xl p-6">
@@ -329,7 +391,6 @@ function Group() {
 
       </div>
 
-
       {/* Leave Group Confirmation Popup */}
       {showLeavePopup && (
 
@@ -345,12 +406,10 @@ function Group() {
               <X size={21} />
             </button>
 
-
             {/* Warning Icon */}
             <div className="w-14 h-14 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
               <AlertTriangle size={30} />
             </div>
-
 
             {/* Popup Content */}
             <div className="text-center">
@@ -360,8 +419,12 @@ function Group() {
               </h2>
 
               <p className="text-sm text-gray-500 mt-3 leading-relaxed">
-                Are you sure you want to leave <span className="font-semibold text-gray-800">{group.name}</span>?
-                You will lose access to this group's expenses, chores and shared shopping list.
+                Are you sure you want to leave{" "}
+                <span className="font-semibold text-gray-800">
+                  {group.group_name}
+                </span>
+                ? You will lose access to this group's expenses, chores and
+                shared shopping list.
               </p>
 
               <p className="text-sm text-red-600 font-medium mt-3">
@@ -369,8 +432,35 @@ function Group() {
               </p>
 
             </div>
+            {isAdmin && (
+              <div className="mt-5">
 
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Transfer Admin Rights To
+                </label>
 
+                {otherMembers.length > 0 ? (
+                  <select
+                    value={selectedAdminId}
+                    onChange={(e) => setSelectedAdminId(e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                  >
+                    <option value="">Select a group member</option>
+
+                    {otherMembers.map((member) => (
+                      <option key={member.user_id} value={member.user_id}>
+                        {member.name} ({member.email})
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <p className="text-sm text-red-600">
+                    No other members available to transfer admin rights.
+                  </p>
+                )}
+
+              </div>
+            )}
             {/* Popup Buttons */}
             <div className="flex items-center gap-3 mt-6">
 
@@ -383,9 +473,14 @@ function Group() {
 
               <button
                 onClick={confirmLeaveGroup}
-                className="flex-1 bg-red-600 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-red-700"
+                disabled={isLeaving || (isAdmin && (!selectedAdminId || otherMembers.length === 0))}
+                className="flex-1 bg-red-600 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Yes, Leave Group
+                {isLeaving
+                  ? "Processing..."
+                  : isAdmin
+                    ? "Transfer Admin & Leave"
+                    : "Yes, Leave Group"}
               </button>
 
             </div>
@@ -397,7 +492,7 @@ function Group() {
       )}
 
     </div>
-  )
+  );
 }
 
-export default Group
+export default Group;

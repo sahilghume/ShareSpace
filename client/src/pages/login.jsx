@@ -1,7 +1,9 @@
 
 import { useState } from "react";
-import { Link, useNavigate, useLocation } from "react-router-dom";
+
 import { Eye, EyeOff, House } from "lucide-react";
+import { Link, useNavigate,useLocation } from "react-router-dom";
+
 
 import { loginUser } from "../services/api";
 import { getUserGroup } from "../services/groupStorage";
@@ -13,43 +15,59 @@ function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+
+  
   const [loading, setLoading] = useState(false);
 
   // Message received after successful registration
   const registrationMessage = location.state?.message;
 
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const navigate = useNavigate();
+
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     setError("");
+setMessage("");
+setError("");
 
-    try {
-      setLoading(true);
+try {
+  setLoading(true);
 
-      // Send login details to the backend
-      const user = await loginUser(
-        email.trim().toLowerCase(),
-        password
-      );
-
-      // Check whether the user already belongs to a group
-      const userGroup = getUserGroup(user.email);
-
-      // Redirect according to group membership
-      if (userGroup) {
-        navigate("/dashboard", { replace: true });
-      } else {
-        navigate("/group-setup", { replace: true });
-      }
-
-    } catch (err) {
-      setError(err.message || "Login failed. Please check your credentials.");
-    } finally {
-      setLoading(false);
+  const response = await fetch(
+    "http://localhost:5000/api/auth/login",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email: email.trim().toLowerCase(),
+        password,
+      }),
     }
-  };
+  );
 
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.message || "Login failed.");
+  }
+
+  localStorage.setItem("token", data.token);
+  localStorage.setItem("user", JSON.stringify(data.user));
+
+  navigate("/dashboard", { replace: true });
+
+} catch (error) {
+  console.error("Login Error:", error);
+  setError(error.message || "Login failed. Please check your credentials.");
+} finally {
+  setLoading(false);
+}
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-10">
       <div className="w-full max-w-md">
@@ -91,6 +109,10 @@ function Login() {
                 value={email}
                 onChange={(e) => {
                   setEmail(e.target.value);
+
+
+                  setMessage("");
+
                   setError("");
                 }}
                 placeholder="Enter your email"

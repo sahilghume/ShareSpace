@@ -13,9 +13,9 @@ function Register() {
   const [loading, setLoading] = useState(false);
 
   const [formData, setFormData] = useState({
-    name: "",
+    fullName: "",
     email: "",
-    phoneNumber: "",
+    mobile: "",
     password: "",
     confirmPassword: "",
   });
@@ -52,6 +52,7 @@ function Register() {
     setMessage("");
 
     try {
+
       setLoading(true);
 
       const userData = {
@@ -79,6 +80,58 @@ function Register() {
       setError(err.message || "Registration failed. Please try again.");
     } finally {
       setLoading(false);
+try {
+  setLoading(true);
+  setError("");
+
+  const response = await fetch(
+    "http://localhost:5000/api/auth/register",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        fullName: formData.fullName.trim(),
+        email: formData.email.trim().toLowerCase(),
+        mobile: formData.mobile.trim(),
+        password: formData.password,
+      }),
+    }
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.message || "Registration failed.");
+  }
+
+  setMessage(
+    data.message || "Registration successful! Please sign in."
+  );
+
+  setFormData({
+    fullName: "",
+    email: "",
+    mobile: "",
+    password: "",
+    confirmPassword: "",
+  });
+
+  setTimeout(() => {
+    navigate("/login", {
+      state: {
+        message: data.message || "Account created successfully. Please sign in.",
+      },
+    });
+  }, 1500);
+
+} catch (error) {
+  console.error("Registration Error:", error);
+  setError(error.message || "Registration failed. Please try again.");
+} finally {
+  setLoading(false);
+}
     }
   };
 
@@ -120,8 +173,8 @@ function Register() {
 
               <input
                 type="text"
-                name="name"
-                value={formData.name}
+                name="fullName"
+                value={formData.fullName}
                 onChange={handleChange}
                 placeholder="Enter your full name"
                 required
@@ -153,8 +206,8 @@ function Register() {
 
               <input
                 type="tel"
-                name="phoneNumber"
-                value={formData.phoneNumber}
+                name="mobile"
+                value={formData.mobile}
                 onChange={handleChange}
                 placeholder="Enter your phone number"
                 required

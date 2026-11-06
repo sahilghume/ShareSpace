@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 
@@ -19,18 +20,35 @@ import {
 } from "lucide-react";
 
 import {
+  getGroupNotices,
+  createNotice,
+  updateNotice,
+  deleteNotice,
+} from "../services/noticeService";
+
+import {
   CURRENT_USER,
-  getChores
+  getChores,
 } from "../services/choreStorage";
 
 import {
-  getShoppingItems
+  getShoppingItems,
 } from "../services/shoppingStorage";
 
 function Dashboard() {
+  const GROUP_ID = 1;
 
   const [chores, setChores] = useState(() => getChores());
   const [shoppingItems, setShoppingItems] = useState(() => getShoppingItems());
+
+  const [notices, setNotices] = useState([]);
+  const [noticeInput, setNoticeInput] = useState("");
+  const [noticeError, setNoticeError] = useState("");
+  const [noticeLoading, setNoticeLoading] = useState(true);
+  const [noticeSubmitting, setNoticeSubmitting] = useState(false);
+  const [editingNoticeId, setEditingNoticeId] = useState(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editMessage, setEditMessage] = useState("");
 
   // Listen for chore and shopping list updates
   useEffect(() => {
@@ -55,6 +73,23 @@ function Dashboard() {
       window.removeEventListener("sharespaceShoppingUpdated", updateShoppingItems);
       window.removeEventListener("storage", updateShoppingItems);
     };
+  }, []);
+
+  // Fetch notices from backend
+  const fetchNotices = async () => {
+    try {
+      setNoticeError("");
+      const data = await getGroupNotices(GROUP_ID);
+      setNotices(data);
+    } catch (error) {
+      setNoticeError(error.message);
+    } finally {
+      setNoticeLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchNotices();
   }, []);
 
   // Notifications for chore creators and secondary verifiers
@@ -102,7 +137,7 @@ function Dashboard() {
     },
   ];
 
-  // Recent Expense Data (Latest 3)
+  // Recent Expense Data
   const recentExpenses = [
     {
       title: "Monthly Electricity Bill",
@@ -168,68 +203,94 @@ function Dashboard() {
     },
   ];
 
-  // Notice Board Data
-  const [notices, setNotices] = useState([
-    {
-      id: 1,
-      name: "Rahul Sharma",
-      message:
-        "Electricity bill has been paid. Everyone please check their pending balance.",
-      time: "Today, 9:30 AM",
-    },
-    {
-      id: 2,
-      name: "Rohit Katkar",
-      message:
-        "Aaj Ratri Jevan Banavu Naka. Mi hotel madhun jevan order karnar aahe.",
-      time: "Today, 8:15 AM",
-    },
-    {
-      id: 3,
-      name: "Arya Tamore",
-      message: "Udya Sakali 8 vajta Mi Gavala janar ahe ",
-      time: "Yesterday, 9:45 PM",
-    },
-    {
-      id: 4,
-      name: "Sahil Ghume",
-      message: "Istriche Kapde Aanle.",
-      time: "Yesterday, 8:45 PM",
-    },
-    {
-      id: 5,
-      name: "Sahil Patil",
-      message: "Mala late hoil mi aaj date la jaanar ahe.",
-      time: "Yesterday, 5:45 PM",
-    },
-  ]);
-
-  // Notice Input
-  const [noticeInput, setNoticeInput] = useState("");
-
   // Add New Notice
-  function addNotice(e) {
+  async function addNotice(e) {
     e.preventDefault();
 
-    if (noticeInput.trim() === "") {
+    if (!noticeInput.trim()) {
       return;
     }
 
-    const newNotice = {
-      id: Date.now(),
-      name: "Rohit",
-      message: noticeInput.trim(),
-      time: new Date().toLocaleString("en-IN", {
-        day: "2-digit",
-        month: "short",
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-    };
+    try {
+      setNoticeError("");
+      setNoticeSubmitting(true);
 
-    setNotices([newNotice, ...notices]);
+      await createNotice({
+        groupId: GROUP_ID,
+        title: "Notice",
+        message: noticeInput.trim(),
+      });
 
-    setNoticeInput("");
+      setNoticeInput("");
+      await fetchNotices();
+    } catch (error) {
+      setNoticeError(error.message);
+    } finally {
+      setNoticeSubmitting(false);
+    }
+  }
+
+  // Format notice date
+  function formatNoticeDate(date) {
+    if (!date) return "";
+
+    return new Date(date).toLocaleString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  function handleEditNotice(notice) {
+    setEditingNoticeId(notice.notice_id);
+    setEditTitle(notice.title);
+    setEditMessage(notice.message);
+  }
+
+  function cancelEdit() {
+    setEditingNoticeId(null);
+    setEditTitle("");
+    setEditMessage("");
+  }
+
+  async function handleUpdateNotice(noticeId) {
+    if (!editTitle.trim() || !editMessage.trim()) {
+      setNoticeError("Title and message are required.");
+      return;
+    }
+
+    try {
+      setNoticeError("");
+
+      await updateNotice(noticeId, {
+        title: editTitle.trim(),
+        message: editMessage.trim(),
+      });
+
+      cancelEdit();
+      await fetchNotices();
+    } catch (error) {
+      setNoticeError(error.message);
+    }
+  }
+
+  async function handleDeleteNotice(noticeId) {
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this notice?"
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setNoticeError("");
+
+      await deleteNotice(noticeId);
+      await fetchNotices();
+    } catch (error) {
+      setNoticeError(error.message);
+    }
   }
 
   return (
@@ -239,7 +300,6 @@ function Dashboard() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Dashboard</h1>
-
           <p className="text-gray-500 mt-1">
             Here's what's happening in your shared space today.
           </p>
@@ -247,11 +307,9 @@ function Dashboard() {
 
         <div className="flex items-center gap-2 bg-green-100 text-green-700 px-4 py-2 rounded-lg w-fit">
           <Megaphone size={18} />
-
           <span className="text-sm font-medium">Green Valley Flat</span>
         </div>
       </div>
-
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
@@ -277,22 +335,21 @@ function Dashboard() {
                 {card.amount}
               </h2>
 
-              <p className="text-xs text-gray-500 mt-2">{card.description}</p>
+              <p className="text-xs text-gray-500 mt-2">
+                {card.description}
+              </p>
             </div>
           );
         })}
       </div>
 
-
-      {/* Verification Notifications - Two Equal Sections */}
+      {/* Verification Notifications */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
         {/* Chore Verification Notifications */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-
           <div className="p-5 border-b border-gray-100">
             <div className="flex items-center gap-3">
-
               <div className="bg-orange-100 text-orange-600 p-3 rounded-lg">
                 <Bell size={22} />
               </div>
@@ -312,24 +369,17 @@ function Dashboard() {
                   {choreNotifications.length} New
                 </span>
               )}
-
             </div>
           </div>
 
-
           <div className="p-5 space-y-4">
-
             {choreNotifications.length > 0 ? (
-
               choreNotifications.map((chore) => (
-
                 <div
                   key={chore.id}
                   className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-orange-100 bg-orange-50 rounded-lg p-4"
                 >
-
                   <div className="flex items-start gap-3 min-w-0">
-
                     <div className="bg-white text-orange-600 p-2 rounded-lg shrink-0">
                       <ShieldCheck size={21} />
                     </div>
@@ -347,7 +397,6 @@ function Dashboard() {
                         Assigned to: {chore.assignedTo}
                       </p>
                     </div>
-
                   </div>
 
                   <Link
@@ -356,13 +405,9 @@ function Dashboard() {
                   >
                     Verify Chore
                   </Link>
-
                 </div>
-
               ))
-
             ) : (
-
               <div className="text-center py-6">
                 <CheckCircle
                   size={35}
@@ -377,20 +422,14 @@ function Dashboard() {
                   You're all caught up!
                 </p>
               </div>
-
             )}
-
           </div>
-
         </div>
 
-
-        {/* Shopping List Verification Notifications */}
+        {/* Shopping Verification Notifications */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-
           <div className="p-5 border-b border-gray-100">
             <div className="flex items-center gap-3">
-
               <div className="bg-green-100 text-green-600 p-3 rounded-lg">
                 <ShoppingBasket size={22} />
               </div>
@@ -410,24 +449,17 @@ function Dashboard() {
                   {shoppingNotifications.length} New
                 </span>
               )}
-
             </div>
           </div>
 
-
           <div className="p-5 space-y-4">
-
             {shoppingNotifications.length > 0 ? (
-
               shoppingNotifications.map((item) => (
-
                 <div
                   key={item.id}
                   className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-green-100 bg-green-50 rounded-lg p-4"
                 >
-
                   <div className="flex items-start gap-3 min-w-0">
-
                     <div className="bg-white text-green-600 p-2 rounded-lg shrink-0">
                       <ShieldCheck size={21} />
                     </div>
@@ -445,7 +477,6 @@ function Dashboard() {
                         Assigned to: {item.assignedTo}
                       </p>
                     </div>
-
                   </div>
 
                   <Link
@@ -454,13 +485,9 @@ function Dashboard() {
                   >
                     Verify Purchase
                   </Link>
-
                 </div>
-
               ))
-
             ) : (
-
               <div className="text-center py-6">
                 <CheckCircle
                   size={35}
@@ -475,15 +502,10 @@ function Dashboard() {
                   You're all caught up!
                 </p>
               </div>
-
             )}
-
           </div>
-
         </div>
-
       </div>
-
 
       {/* Notice Board */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
@@ -494,7 +516,9 @@ function Dashboard() {
             </div>
 
             <div>
-              <h2 className="text-lg font-bold text-gray-800">Notice Board</h2>
+              <h2 className="text-lg font-bold text-gray-800">
+                Notice Board
+              </h2>
 
               <p className="text-sm text-gray-500 mt-1">
                 Important updates from your roommates
@@ -505,32 +529,103 @@ function Dashboard() {
 
         {/* Scrollable Notices */}
         <div className="max-h-64 overflow-y-auto p-5 space-y-4">
-          {notices.map((notice) => (
+          {noticeLoading && (
+            <p className="text-center text-gray-500 text-sm">
+              Loading notices...
+            </p>
+          )}
+
+          {noticeError && (
+            <p className="text-center text-red-500 text-sm">
+              {noticeError}
+            </p>
+          )}
+
+          {!noticeLoading && notices.map((notice) => (
             <div
-              key={notice.id}
-              className="flex gap-3 border-b border-gray-100 pb-4 last:border-0 last:pb-0"
+              key={notice.notice_id}
+              className="border-b border-gray-100 pb-4 last:border-0"
             >
-              <div className="bg-green-100 text-green-700 rounded-full w-10 h-10 flex items-center justify-center font-bold text-sm shrink-0">
-                {notice.name.charAt(0)}
-              </div>
+              {editingNoticeId === notice.notice_id ? (
+                <div className="space-y-3">
+                  <input
+                    type="text"
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    className="w-full border rounded-lg px-3 py-2 text-sm"
+                    placeholder="Notice title"
+                  />
 
-              <div className="flex-1 min-w-0">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-                  <p className="text-sm font-semibold text-gray-800">
-                    {notice.name}
-                  </p>
+                  <textarea
+                    value={editMessage}
+                    onChange={(e) => setEditMessage(e.target.value)}
+                    className="w-full border rounded-lg px-3 py-2 text-sm"
+                    placeholder="Notice message"
+                    rows={3}
+                  />
 
-                  <p className="text-xs text-gray-400">{notice.time}</p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleUpdateNotice(notice.notice_id)}
+                      className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm"
+                    >
+                      Save
+                    </button>
+
+                    <button
+                      onClick={cancelEdit}
+                      className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm"
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
+              ) : (
+                <div className="flex gap-3">
+                  <div className="bg-green-100 text-green-700 rounded-full w-10 h-10 flex items-center justify-center font-bold shrink-0">
+                    {notice.posted_by_name?.charAt(0).toUpperCase() || "U"}
+                  </div>
 
-                <p className="text-sm text-gray-600 mt-2 break-words">
-                  {notice.message}
-                </p>
-              </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-col sm:flex-row sm:justify-between gap-1">
+                      <p className="text-sm font-semibold text-gray-800">
+                        {notice.posted_by_name}
+                      </p>
+
+                      <p className="text-xs text-gray-400">
+                        {formatNoticeDate(notice.created_at)}
+                      </p>
+                    </div>
+
+
+                    <p className="text-sm text-gray-600 mt-1 break-words">
+                      {notice.message}
+                    </p>
+
+                    {Number(notice.can_manage) === 1 && (
+                      <div className="flex gap-3 mt-3">
+                        <button
+                          onClick={() => handleEditNotice(notice)}
+                          className="text-blue-600 hover:text-blue-800 text-sm font-semibold"
+                        >
+                          Edit
+                        </button>
+
+                        <button
+                          onClick={() => handleDeleteNotice(notice.notice_id)}
+                          className="text-red-600 hover:text-red-800 text-sm font-semibold"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           ))}
 
-          {notices.length === 0 && (
+          {!noticeLoading && notices.length === 0 && !noticeError && (
             <p className="text-center text-gray-400 text-sm py-6">
               No notices yet. Be the first to post!
             </p>
@@ -552,14 +647,14 @@ function Dashboard() {
 
           <button
             type="submit"
-            className="bg-green-600 hover:bg-green-700 text-white px-5 py-3 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-colors"
+            disabled={noticeSubmitting}
+            className="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-5 py-3 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-colors"
           >
             <Send size={16} />
-            Post Notice
+            {noticeSubmitting ? "Posting..." : "Post Notice"}
           </button>
         </form>
       </div>
-
 
       {/* Recent Expenses and Pending Payments */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
@@ -627,7 +722,6 @@ function Dashboard() {
           </div>
         </div>
 
-
         {/* Pending Payments */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
           <div className="p-5 border-b border-gray-100">
@@ -651,7 +745,9 @@ function Dashboard() {
                     {payment.name}
                   </p>
 
-                  <p className="text-xs text-gray-500 mt-1">{payment.reason}</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {payment.reason}
+                  </p>
                 </div>
 
                 <p className="text-sm font-bold text-orange-600 whitespace-nowrap">
@@ -661,7 +757,9 @@ function Dashboard() {
             ))}
 
             <div className="bg-orange-50 rounded-lg p-4">
-              <p className="text-xs text-orange-700">Total amount you owe</p>
+              <p className="text-xs text-orange-700">
+                Total amount you owe
+              </p>
 
               <h3 className="text-2xl font-bold text-orange-700 mt-1">
                 ₹1,383
@@ -673,15 +771,15 @@ function Dashboard() {
             </button>
           </div>
         </div>
-
       </div>
-
 
       {/* Upcoming Chores */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
         <div className="flex items-center justify-between p-5 border-b border-gray-100">
           <div>
-            <h2 className="text-lg font-bold text-gray-800">Upcoming Chores</h2>
+            <h2 className="text-lg font-bold text-gray-800">
+              Upcoming Chores
+            </h2>
 
             <p className="text-sm text-gray-500 mt-1">
               Household responsibilities
@@ -722,11 +820,10 @@ function Dashboard() {
                 </div>
 
                 <span
-                  className={`text-xs font-semibold px-3 py-1 rounded-full ${
-                    chore.status === "Pending"
-                      ? "bg-orange-100 text-orange-700"
-                      : "bg-blue-100 text-blue-700"
-                  }`}
+                  className={`text-xs font-semibold px-3 py-1 rounded-full ${chore.status === "Pending"
+                    ? "bg-orange-100 text-orange-700"
+                    : "bg-blue-100 text-blue-700"
+                    }`}
                 >
                   {chore.status}
                 </span>
@@ -736,8 +833,7 @@ function Dashboard() {
         </div>
       </div>
 
-
-      {/* Bottom Section: Two Equal Cards */}
+      {/* Bottom Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
         {/* Shared Shopping List */}
@@ -745,8 +841,9 @@ function Dashboard() {
           <div>
             <div className="flex items-center gap-3 mb-3">
               <ShoppingBasket size={25} className="text-green-600" />
-
-              <h3 className="text-lg font-bold">Shared Shopping List</h3>
+              <h3 className="text-lg font-bold">
+                Shared Shopping List
+              </h3>
             </div>
 
             <p className="text-sm text-gray-600 mb-5">
@@ -761,7 +858,6 @@ function Dashboard() {
             Manage Shopping List
           </Link>
         </div>
-
 
         {/* Roommate Community Card */}
         <div className="bg-white border border-green-100 rounded-xl p-6 flex items-center justify-between gap-4 overflow-hidden">
@@ -794,7 +890,11 @@ function Dashboard() {
             <div className="absolute inset-0 bg-green-50 rounded-full"></div>
 
             <div className="relative flex flex-col items-center">
-              <House size={75} strokeWidth={1.5} className="text-green-700" />
+              <House
+                size={75}
+                strokeWidth={1.5}
+                className="text-green-700"
+              />
 
               <div className="flex items-center gap-1 -mt-5 bg-green-100 px-3 py-1 rounded-full">
                 <Users size={17} className="text-green-700" />
@@ -805,9 +905,7 @@ function Dashboard() {
             </div>
           </div>
         </div>
-
       </div>
-
     </div>
   );
 }
