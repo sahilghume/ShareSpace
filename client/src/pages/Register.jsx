@@ -1,11 +1,16 @@
 
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Eye, EyeOff, House } from "lucide-react";
 
+import { registerUser } from "../services/api";
+
 function Register() {
+  const navigate = useNavigate();
+
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const [formData, setFormData] = useState({
     fullName: "",
@@ -47,42 +52,86 @@ function Register() {
     setMessage("");
 
     try {
-      const response = await fetch(
-        "http://localhost:5000/api/auth/register",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            fullName: formData.fullName,
-            email: formData.email,
-            mobile: formData.mobile,
-            password: formData.password,
-          }),
-        }
+
+      setLoading(true);
+
+      const userData = {
+        name: formData.name.trim(),
+        email: formData.email.trim().toLowerCase(),
+        phoneNumber: formData.phoneNumber.trim(),
+        password: formData.password,
+      };
+
+      const response = await registerUser(userData);
+
+      setMessage(
+        response.message || "Registration successful! Please sign in."
       );
 
-      const data = await response.json();
+      setTimeout(() => {
+        navigate("/login", {
+          state: {
+            message: response.message || "Account created successfully. Please sign in."
+          }
+        });
+      }, 1500);
 
-      if (!response.ok) {
-        setError(data.message || "Registration failed.");
-        return;
-      }
+    } catch (err) {
+      setError(err.message || "Registration failed. Please try again.");
+    } finally {
+      setLoading(false);
+try {
+  setLoading(true);
+  setError("");
 
-      setMessage(data.message || "Registration successful!");
+  const response = await fetch(
+    "http://localhost:5000/api/auth/register",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        fullName: formData.fullName.trim(),
+        email: formData.email.trim().toLowerCase(),
+        mobile: formData.mobile.trim(),
+        password: formData.password,
+      }),
+    }
+  );
 
-      setFormData({
-        fullName: "",
-        email: "",
-        mobile: "",
-        password: "",
-        confirmPassword: "",
-      });
+  const data = await response.json();
 
-    } catch (error) {
-      console.error("Registration Error:", error);
-      setError("Unable to connect to the server.");
+  if (!response.ok) {
+    throw new Error(data.message || "Registration failed.");
+  }
+
+  setMessage(
+    data.message || "Registration successful! Please sign in."
+  );
+
+  setFormData({
+    fullName: "",
+    email: "",
+    mobile: "",
+    password: "",
+    confirmPassword: "",
+  });
+
+  setTimeout(() => {
+    navigate("/login", {
+      state: {
+        message: data.message || "Account created successfully. Please sign in.",
+      },
+    });
+  }, 1500);
+
+} catch (error) {
+  console.error("Registration Error:", error);
+  setError(error.message || "Registration failed. Please try again.");
+} finally {
+  setLoading(false);
+}
     }
   };
 
@@ -247,9 +296,10 @@ function Register() {
 
             <button
               type="submit"
-              className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-lg transition duration-200"
+              disabled={loading}
+              className="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white font-semibold py-3 rounded-lg transition duration-200"
             >
-              Create Account
+              {loading ? "Creating Account..." : "Create Account"}
             </button>
 
           </form>
