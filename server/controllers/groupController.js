@@ -262,7 +262,47 @@ const leaveGroup = async (req, res) => {
     });
   }
 };
+const transferAdminAndLeave = async (req, res) => {
+  try {
+    const groupId = req.params.id;
+    const currentAdminId = req.user.id;
+    const { newAdminId } = req.body;
 
+    if (!newAdminId || !Number.isInteger(Number(newAdminId))) {
+      return res.status(400).json({
+        success: false,
+        message: "Please select a valid member",
+      });
+    }
+
+    const admin = await Group.findMember(groupId, currentAdminId);
+
+    if (!admin || admin.role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Only the group admin can transfer admin rights",
+      });
+    }
+
+    await Group.transferAdminAndLeave(
+      groupId,
+      currentAdminId,
+      Number(newAdminId),
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Admin rights transferred and you left the group",
+    });
+  } catch (error) {
+    console.error("Transfer Admin Error:", error);
+
+    return res.status(400).json({
+      success: false,
+      message: error.message || "Unable to transfer admin rights",
+    });
+  }
+};
 module.exports = {
   createGroup,
   joinGroup,
@@ -271,4 +311,5 @@ module.exports = {
   getGroupMembers,
   removeMember,
   leaveGroup,
+  transferAdminAndLeave,
 };

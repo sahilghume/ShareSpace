@@ -11,6 +11,7 @@ const {
   getGroupMembers,
   removeMember,
   leaveGroup,
+  transferAdminAndLeave,
 } = require("../controllers/groupController");
 
 // Protect all group routes
@@ -23,5 +24,6 @@ router.get("/:id", getGroupDetails);
 router.get("/:id/members", getGroupMembers);
 router.delete("/:id/members/:memberId", removeMember);
 router.delete("/:id/leave", leaveGroup);
+router.put("/:id/transfer-admin", transferAdminAndLeave);
 
 module.exports = router;

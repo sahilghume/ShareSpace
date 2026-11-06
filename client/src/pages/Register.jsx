@@ -8,9 +8,9 @@ function Register() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const [formData, setFormData] = useState({
-    name: "",
+    fullName: "",
     email: "",
-    phoneNumber: "",
+    mobile: "",
     password: "",
     confirmPassword: "",
   });
@@ -30,7 +30,7 @@ function Register() {
     setMessage("");
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (formData.password.length < 8) {
@@ -44,7 +44,46 @@ function Register() {
     }
 
     setError("");
-    setMessage("Form validation successful.");
+    setMessage("");
+
+    try {
+      const response = await fetch(
+        "http://localhost:5000/api/auth/register",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            fullName: formData.fullName,
+            email: formData.email,
+            mobile: formData.mobile,
+            password: formData.password,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.message || "Registration failed.");
+        return;
+      }
+
+      setMessage(data.message || "Registration successful!");
+
+      setFormData({
+        fullName: "",
+        email: "",
+        mobile: "",
+        password: "",
+        confirmPassword: "",
+      });
+
+    } catch (error) {
+      console.error("Registration Error:", error);
+      setError("Unable to connect to the server.");
+    }
   };
 
   return (
@@ -85,8 +124,8 @@ function Register() {
 
               <input
                 type="text"
-                name="name"
-                value={formData.name}
+                name="fullName"
+                value={formData.fullName}
                 onChange={handleChange}
                 placeholder="Enter your full name"
                 required
@@ -118,8 +157,8 @@ function Register() {
 
               <input
                 type="tel"
-                name="phoneNumber"
-                value={formData.phoneNumber}
+                name="mobile"
+                value={formData.mobile}
                 onChange={handleChange}
                 placeholder="Enter your phone number"
                 required

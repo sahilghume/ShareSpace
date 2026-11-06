@@ -65,7 +65,7 @@ const getGroupNotices = async (req, res) => {
       });
     }
 
-    const notices = await Notice.getGroupNotices(groupId);
+    const notices = await Notice.getGroupNotices(groupId, userId);
 
     return res.status(200).json({
       success: true,

@@ -1,17 +1,56 @@
 
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import { Eye, EyeOff, House } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+
 
 function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const navigate = useNavigate();
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setMessage("Form validation successful.");
+
+    setError("");
+    setMessage("");
+
+    try {
+      const response = await fetch(
+        "http://localhost:5000/api/auth/login",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email,
+            password,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.message || "Login failed.");
+        return;
+      }
+
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("user", JSON.stringify(data.user));
+
+      console.log("Login Response:", data);
+
+      navigate("/dashboard");
+
+    } catch (error) {
+      console.error("Login Error:", error);
+      setError("Unable to connect to the server.");
+    }
   };
 
   return (
@@ -56,6 +95,7 @@ function Login() {
                 onChange={(e) => {
                   setEmail(e.target.value);
                   setMessage("");
+                  setError("");
                 }}
                 placeholder="Enter your email"
                 required
@@ -75,6 +115,7 @@ function Login() {
                   onChange={(e) => {
                     setPassword(e.target.value);
                     setMessage("");
+                    setError("");
                   }}
                   placeholder="Enter your password"
                   required
@@ -91,6 +132,12 @@ function Login() {
                 </button>
               </div>
             </div>
+
+            {error && (
+              <p className="text-sm text-red-600">
+                {error}
+              </p>
+            )}
 
             {message && (
               <p className="text-sm text-green-700">
