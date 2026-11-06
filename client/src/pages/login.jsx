@@ -1,17 +1,53 @@
 
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Eye, EyeOff, House } from "lucide-react";
 
+import { loginUser } from "../services/api";
+import { getUserGroup } from "../services/groupStorage";
+
 function Login() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  // Message received after successful registration
+  const registrationMessage = location.state?.message;
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setMessage("Form validation successful.");
+
+    setError("");
+
+    try {
+      setLoading(true);
+
+      // Send login details to the backend
+      const user = await loginUser(
+        email.trim().toLowerCase(),
+        password
+      );
+
+      // Check whether the user already belongs to a group
+      const userGroup = getUserGroup(user.email);
+
+      // Redirect according to group membership
+      if (userGroup) {
+        navigate("/dashboard", { replace: true });
+      } else {
+        navigate("/group-setup", { replace: true });
+      }
+
+    } catch (err) {
+      setError(err.message || "Login failed. Please check your credentials.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -55,7 +91,7 @@ function Login() {
                 value={email}
                 onChange={(e) => {
                   setEmail(e.target.value);
-                  setMessage("");
+                  setError("");
                 }}
                 placeholder="Enter your email"
                 required
@@ -74,7 +110,7 @@ function Login() {
                   value={password}
                   onChange={(e) => {
                     setPassword(e.target.value);
-                    setMessage("");
+                    setError("");
                   }}
                   placeholder="Enter your password"
                   required
@@ -92,17 +128,24 @@ function Login() {
               </div>
             </div>
 
-            {message && (
+            {registrationMessage && (
               <p className="text-sm text-green-700">
-                {message}
+                {registrationMessage}
+              </p>
+            )}
+
+            {error && (
+              <p className="text-sm text-red-600">
+                {error}
               </p>
             )}
 
             <button
               type="submit"
-              className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-lg transition duration-200"
+              disabled={loading}
+              className="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white font-semibold py-3 rounded-lg transition duration-200"
             >
-              Sign In
+              {loading ? "Signing In..." : "Sign In"}
             </button>
 
           </form>

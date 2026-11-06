@@ -1,11 +1,16 @@
 
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Eye, EyeOff, House } from "lucide-react";
 
+import { registerUser } from "../services/api";
+
 function Register() {
+  const navigate = useNavigate();
+
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -30,7 +35,7 @@ function Register() {
     setMessage("");
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (formData.password.length < 8) {
@@ -44,7 +49,37 @@ function Register() {
     }
 
     setError("");
-    setMessage("Form validation successful.");
+    setMessage("");
+
+    try {
+      setLoading(true);
+
+      const userData = {
+        name: formData.name.trim(),
+        email: formData.email.trim().toLowerCase(),
+        phoneNumber: formData.phoneNumber.trim(),
+        password: formData.password,
+      };
+
+      const response = await registerUser(userData);
+
+      setMessage(
+        response.message || "Registration successful! Please sign in."
+      );
+
+      setTimeout(() => {
+        navigate("/login", {
+          state: {
+            message: response.message || "Account created successfully. Please sign in."
+          }
+        });
+      }, 1500);
+
+    } catch (err) {
+      setError(err.message || "Registration failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -208,9 +243,10 @@ function Register() {
 
             <button
               type="submit"
-              className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-lg transition duration-200"
+              disabled={loading}
+              className="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white font-semibold py-3 rounded-lg transition duration-200"
             >
-              Create Account
+              {loading ? "Creating Account..." : "Create Account"}
             </button>
 
           </form>
