@@ -220,7 +220,7 @@ const deleteShoppingItem = async (req, res) => {
 
     const member = await Group.findMember(item.group_id, userId);
 
-    if (!member || member.admin !== "admin") {
+    if (!member || member.role !== "admin") {
       return res.status(403).json({
         success: false,
         message: "Only group admin can delete shopping items",

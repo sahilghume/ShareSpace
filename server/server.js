@@ -5,7 +5,7 @@ const db = require("./config/db");
 const groupRoutes = require("./routes/groupRoutes");
 const expenseRoutes = require("./routes/expenseRoutes");
 // const choreRoutes = require("./routes/choreRoutes");
-// const shoppingRoutes = require("./routes/shoppingRoutes");
+const shoppingRoutes = require("./routes/shoppingRoutes");
 // const maintenanceRoutes = require("./routes/maintenanceRoutes");
 const noticeRoutes = require("./routes/noticeRoutes");
 
@@ -20,7 +20,7 @@ const authRoutes = require("./routes/authRoutes");
 app.use("/api/groups", groupRoutes);
 app.use("/api/expenses", expenseRoutes);
 // app.use("/api/chores", choreRoutes);
-// app.use("/api/shopping", shoppingRoutes);
+app.use("/api/shopping", shoppingRoutes);
 // app.use("/api/maintenance", maintenanceRoutes);
 app.use("/api/notices", noticeRoutes);
 
