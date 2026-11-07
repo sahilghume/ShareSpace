@@ -6,7 +6,6 @@ const groupRoutes = require("./routes/groupRoutes");
 const expenseRoutes = require("./routes/expenseRoutes");
 const choreRoutes = require("./routes/choreRoutes");
 const shoppingRoutes = require("./routes/shoppingRoutes");
-// const maintenanceRoutes = require("./routes/maintenanceRoutes");
 const noticeRoutes = require("./routes/noticeRoutes");
 
 const app = express();

@@ -3,7 +3,6 @@ import { useState, useEffect } from "react";
 
 import {
   Users,
-  MapPin,
   CalendarDays,
   Copy,
   Home,
@@ -13,13 +12,13 @@ import {
   AlertTriangle,
   X,
 } from "lucide-react";
-
 import {
   getMyGroups,
   getGroupDetails,
   getGroupMembers,
   leaveGroup,
   transferAdminAndLeave,
+  deleteGroup,
 } from "../services/groupService";
 
 function Group() {
@@ -32,6 +31,7 @@ function Group() {
   const [error, setError] = useState("");
   const [selectedAdminId, setSelectedAdminId] = useState("");
   const [isLeaving, setIsLeaving] = useState(false);
+  const [leaveAction, setLeaveAction] = useState("transfer");
 
   const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
   const currentUserId = currentUser.user_id || currentUser.id;
@@ -99,17 +99,32 @@ function Group() {
       setIsLeaving(true);
 
       if (isAdmin) {
-        if (!selectedAdminId) {
-          alert("Please select a member to transfer admin rights.");
-          return;
-        }
+        if (leaveAction === "delete") {
+          const confirmed = window.confirm(
+            `Are you sure you want to permanently delete "${group.group_name}" and all its associated data? This action cannot be undone.`
+          );
 
-        await transferAdminAndLeave(group.group_id, selectedAdminId);
+          if (!confirmed) return;
+
+          await deleteGroup(group.group_id);
+
+          alert("Group deleted successfully.");
+        } else {
+          if (!selectedAdminId) {
+            alert("Please select a member to transfer admin rights.");
+            return;
+          }
+
+          await transferAdminAndLeave(group.group_id, selectedAdminId);
+
+          alert("Admin rights transferred and you left the group.");
+        }
       } else {
         await leaveGroup(group.group_id);
+
+        alert("You have successfully left the group.");
       }
 
-      alert("You have successfully left the group.");
       setShowLeavePopup(false);
       window.location.reload();
 
@@ -187,18 +202,8 @@ function Group() {
 
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 mt-6 pt-6 border-t border-gray-100">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mt-6 pt-6 border-t border-gray-100">
 
-          <div className="flex items-center gap-3">
-            <MapPin className="text-green-600" size={20} />
-
-            <div>
-              <p className="text-xs text-gray-500">Location</p>
-              <p className="text-sm font-semibold text-gray-800">
-                Not provided
-              </p>
-            </div>
-          </div>
 
           <div className="flex items-center gap-3">
             <CalendarDays className="text-green-600" size={20} />
@@ -433,30 +438,78 @@ function Group() {
 
             </div>
             {isAdmin && (
-              <div className="mt-5">
+              <div className="mt-5 space-y-4">
 
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Transfer Admin Rights To
+                <p className="text-sm font-semibold text-gray-700">
+                  Choose what you want to do:
+                </p>
+
+                <label className="flex items-start gap-3 border border-gray-200 rounded-lg p-3 cursor-pointer hover:bg-gray-50">
+                  <input
+                    type="radio"
+                    name="leaveAction"
+                    value="transfer"
+                    checked={leaveAction === "transfer"}
+                    onChange={() => setLeaveAction("transfer")}
+                    className="mt-1 accent-green-600"
+                  />
+
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800">
+                      Assign New Admin & Leave
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Transfer admin rights to another member and leave the group.
+                    </p>
+                  </div>
                 </label>
 
-                {otherMembers.length > 0 ? (
-                  <select
-                    value={selectedAdminId}
-                    onChange={(e) => setSelectedAdminId(e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                  >
-                    <option value="">Select a group member</option>
+                <label className="flex items-start gap-3 border border-red-200 rounded-lg p-3 cursor-pointer hover:bg-red-50">
+                  <input
+                    type="radio"
+                    name="leaveAction"
+                    value="delete"
+                    checked={leaveAction === "delete"}
+                    onChange={() => setLeaveAction("delete")}
+                    className="mt-1 accent-red-600"
+                  />
 
-                    {otherMembers.map((member) => (
-                      <option key={member.user_id} value={member.user_id}>
-                        {member.name} ({member.email})
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <p className="text-sm text-red-600">
-                    No other members available to transfer admin rights.
-                  </p>
+                  <div>
+                    <p className="text-sm font-semibold text-red-600">
+                      Delete Group
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Permanently delete the group and its associated data.
+                    </p>
+                  </div>
+                </label>
+
+                {leaveAction === "transfer" && (
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Transfer Admin Rights To
+                    </label>
+
+                    {otherMembers.length > 0 ? (
+                      <select
+                        value={selectedAdminId}
+                        onChange={(e) => setSelectedAdminId(e.target.value)}
+                        className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                      >
+                        <option value="">Select a group member</option>
+
+                        {otherMembers.map((member) => (
+                          <option key={member.user_id} value={member.user_id}>
+                            {member.name} ({member.email})
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <p className="text-sm text-red-600">
+                        No other members available to transfer admin rights.
+                      </p>
+                    )}
+                  </div>
                 )}
 
               </div>
@@ -473,13 +526,23 @@ function Group() {
 
               <button
                 onClick={confirmLeaveGroup}
-                disabled={isLeaving || (isAdmin && (!selectedAdminId || otherMembers.length === 0))}
-                className="flex-1 bg-red-600 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={
+                  isLeaving ||
+                  (isAdmin &&
+                    leaveAction === "transfer" &&
+                    (!selectedAdminId || otherMembers.length === 0))
+                }
+                className={`flex-1 text-white py-2.5 rounded-lg text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed ${isAdmin && leaveAction === "delete"
+                  ? "bg-red-700 hover:bg-red-800"
+                  : "bg-red-600 hover:bg-red-700"
+                  }`}
               >
                 {isLeaving
                   ? "Processing..."
                   : isAdmin
-                    ? "Transfer Admin & Leave"
+                    ? leaveAction === "delete"
+                      ? "Delete Group"
+                      : "Transfer Admin & Leave"
                     : "Yes, Leave Group"}
               </button>
 

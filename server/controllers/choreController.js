@@ -16,13 +16,12 @@ const createChore = async (req, res) => {
 
     const member = await Group.findMember(groupId, userId);
 
-    if (!member || member.role !== "admin") {
+    if (!member) {
       return res.status(403).json({
         success: false,
-        message: "Only group admin can create chores",
+        message: "Only group members can create chores",
       });
     }
-
     let verifierIdValue = null;
 
     if (verifierId) {
@@ -264,12 +263,12 @@ const assignChore = async (req, res) => {
       });
     }
 
-    const admin = await Group.findMember(chore.group_id, userId);
+    const member = await Group.findMember(chore.group_id, userId);
 
-    if (!admin || admin.role !== "admin") {
+    if (!member) {
       return res.status(403).json({
         success: false,
-        message: "Only group admin can assign chores",
+        message: "Only group members can assign chores",
       });
     }
 
