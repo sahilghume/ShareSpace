@@ -7,6 +7,7 @@ const expenseRoutes = require("./routes/expenseRoutes");
 const choreRoutes = require("./routes/choreRoutes");
 const shoppingRoutes = require("./routes/shoppingRoutes");
 const noticeRoutes = require("./routes/noticeRoutes");
+const startChoreRotationScheduler = require("./jobs/choreRotationScheduler");
 
 const app = express();
 
@@ -34,4 +35,6 @@ const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
   console.log(`ShareSpace server running on port ${PORT}`);
+
+  startChoreRotationScheduler();
 });

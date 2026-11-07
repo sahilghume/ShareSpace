@@ -5,6 +5,7 @@ const authMiddleware = require("../middleware/authMiddleware");
 
 const {
   createChore,
+  createRotationChore,
   getGroupChores,
   getChoreById,
   updateChore,
@@ -20,6 +21,7 @@ router.use(authMiddleware);
 
 // Chore routes
 router.post("/", createChore);
+router.post("/rotation", createRotationChore);
 router.get("/group/:groupId", getGroupChores);
 router.get("/assignments/:groupId", getDailyAssignments);
 router.post("/assign", assignChore);

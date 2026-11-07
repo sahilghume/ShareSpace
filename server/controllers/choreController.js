@@ -263,6 +263,13 @@ const assignChore = async (req, res) => {
       });
     }
 
+    if (chore.chore_type === "rotation") {
+      return res.status(400).json({
+        success: false,
+        message: "Rotation chores are assigned automatically",
+      });
+    }
+
     const member = await Group.findMember(chore.group_id, userId);
 
     if (!member) {
@@ -490,6 +497,63 @@ const approveChore = async (req, res) => {
     });
   }
 };
+
+const createRotationChore = async (req, res) => {
+  try {
+    const { groupId, choreName, description, verifierId } = req.body;
+    const userId = req.user.id;
+
+    if (!groupId || !choreName || !choreName.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Group ID and chore name are required",
+      });
+    }
+
+    const member = await Group.findMember(groupId, userId);
+
+    if (!member || member.role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Only group admin can create rotation chores",
+      });
+    }
+
+    if (verifierId) {
+      const verifier = await Group.findMember(groupId, verifierId);
+
+      if (!verifier) {
+        return res.status(400).json({
+          success: false,
+          message: "Verifier must be a group member",
+        });
+      }
+    }
+
+    const chore = await Chore.createChore({
+      group_id: groupId,
+      chore_name: choreName.trim(),
+      description: description || null,
+      created_by: userId,
+      verifier_id: verifierId || null,
+      chore_type: "rotation",
+    });
+
+    await Chore.resetRotationForGroup(groupId);
+
+    return res.status(201).json({
+      success: true,
+      message: "Rotation chore created successfully",
+      chore,
+    });
+  } catch (error) {
+    console.error("Create Rotation Chore Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Unable to create rotation chore",
+    });
+  }
+};
 module.exports = {
   createChore,
   getGroupChores,
@@ -501,4 +565,5 @@ module.exports = {
   updateChoreStatus,
   submitChoreForVerification,
   approveChore,
+  createRotationChore,
 };

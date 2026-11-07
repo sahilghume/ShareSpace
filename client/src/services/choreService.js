@@ -43,7 +43,12 @@ export const createChore = async (choreData) => {
     body: JSON.stringify(choreData),
   });
 };
-
+export const createRotationChore = async (choreData) => {
+  return sendRequest(`${API_URL}/rotation`, {
+    method: "POST",
+    body: JSON.stringify(choreData),
+  });
+};
 export const assignChore = async (assignmentData) => {
   return sendRequest(`${API_URL}/assign`, {
     method: "POST",

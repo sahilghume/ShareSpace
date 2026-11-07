@@ -181,12 +181,13 @@ function getUserGroups(userId) {
 
 function getMembers(groupId) {
   const sql = `
-        SELECT u.user_id, u.name, u.email, u.phone,
-               gm.role, gm.joined_at
-        FROM group_members gm
-        JOIN users u ON gm.user_id = u.user_id
-        WHERE gm.group_id = ?
-    `;
+    SELECT u.user_id, u.name, u.email, u.phone,
+           gm.role, gm.joined_at
+    FROM group_members gm
+    JOIN users u ON gm.user_id = u.user_id
+    WHERE gm.group_id = ?
+    ORDER BY gm.id ASC
+`;
 
   return new Promise((resolve, reject) => {
     sqlConnectionPool.query(sql, [groupId], (err, result) => {
