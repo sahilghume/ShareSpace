@@ -136,6 +136,14 @@ function Login() {
                   required
                   className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
                 />
+                <div className="flex justify-end">
+                  <Link
+                    to="/forgot-password"
+                    className="text-sm text-green-600 font-semibold hover:text-green-700"
+                  >
+                    Forgot Password?
+                  </Link>
+                </div>
 
                 <button
                   type="button"

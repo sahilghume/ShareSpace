@@ -19,7 +19,8 @@ import Expenses from "./pages/Expenses";
 import Chores from "./pages/Chores";
 import ShoppingList from "./pages/ShoppingList";
 import Profile from "./pages/Profile";
-
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 import { getMyGroups } from "./services/groupService";
 
 // Check whether the user is logged in
@@ -131,6 +132,10 @@ function App() {
         <Route path="/login" element={<Login />} />
 
         <Route path="/register" element={<Register />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+
+        <Route path="/reset-password/:token" element={<ResetPassword />} />
+
 
         <Route
           path="/group-setup"

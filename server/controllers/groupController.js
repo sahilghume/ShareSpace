@@ -1,5 +1,6 @@
 const Group = require("../models/Group");
 const crypto = require("crypto");
+const Chore = require("../models/Chore");
 
 const createGroup = async (req, res) => {
   try {
@@ -94,6 +95,7 @@ const joinGroup = async (req, res) => {
       user_id: userId,
       role: "member",
     });
+    await Chore.resetGroupChoreRotation(group.group_id);
 
     return res.status(200).json({
       success: true,
@@ -239,6 +241,7 @@ const removeMember = async (req, res) => {
     }
 
     await Group.removeMember(groupId, memberId);
+    await Chore.resetGroupChoreRotation(groupId);
 
     return res.status(200).json({
       success: true,
@@ -276,6 +279,7 @@ const leaveGroup = async (req, res) => {
     }
 
     await Group.leaveGroup(groupId, userId);
+    await Chore.resetGroupChoreRotation(groupId);
 
     return res.status(200).json({
       success: true,
@@ -317,6 +321,7 @@ const transferAdminAndLeave = async (req, res) => {
       currentAdminId,
       Number(newAdminId),
     );
+    await Chore.resetGroupChoreRotation(groupId);
 
     return res.status(200).json({
       success: true,

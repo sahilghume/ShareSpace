@@ -14,6 +14,7 @@ import {
 import {
   getDailyAssignments,
   createChore,
+  createRotationChore,
   assignChore,
   submitChoreForVerification,
   approveChore as approveChoreAPI
@@ -38,9 +39,16 @@ function Chores() {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [assignedTo, setAssignedTo] = useState('')
+  const [choreType, setChoreType] = useState('manual')
   const [secondaryVerifier, setSecondaryVerifier] = useState('')
   const [dueDate, setDueDate] = useState('')
   const [priority, setPriority] = useState('Medium')
+
+  const isAdmin = members.some(
+    member =>
+      Number(member.user_id) === currentUser?.id &&
+      member.role === 'admin'
+  )
 
   const formatAssignments = (assignments) => {
     return assignments.map((item) => ({
@@ -48,6 +56,7 @@ function Chores() {
       choreId: item.chore_id,
       title: item.title,
       description: item.description,
+      choreType: item.chore_type,
       assignedTo: item.assigned_to,
       assignedToName: item.assigned_to_name,
       createdBy: item.created_by,
@@ -138,53 +147,78 @@ function Chores() {
     return chore.status === filter
   })
 
-  // Add a new chore and assign it
+  // Reset form fields
+  const resetForm = () => {
+    setTitle('')
+    setDescription('')
+    setChoreType('manual')
+    setSecondaryVerifier('')
+    setDueDate('')
+    setPriority('Medium')
+  }
+
+  // Add a manual or rotation chore
   const addChore = async (e) => {
     e.preventDefault()
 
     try {
       setError('')
 
-      if (!groupId || !assignedTo) {
-        throw new Error('Please select a group member.')
+      if (!groupId) {
+        throw new Error('Group not found.')
       }
 
-      const choreResponse = await createChore({
-        groupId,
-        choreName: title.trim(),
-        description: description.trim(),
-        verifierId: secondaryVerifier
-          ? Number(secondaryVerifier)
-          : null
-      })
+      if (choreType === 'rotation') {
+        if (!isAdmin) {
+          throw new Error('Only group admins can create rotation chores.')
+        }
 
-      const choreId = choreResponse.chore.chore_id
+        await createRotationChore({
+          groupId,
+          choreName: title.trim(),
+          description: description.trim(),
+          verifierId: secondaryVerifier
+            ? Number(secondaryVerifier)
+            : null
+        })
+      } else {
+        if (!assignedTo) {
+          throw new Error('Please select a group member.')
+        }
 
-      const today = new Date()
+        const choreResponse = await createChore({
+          groupId,
+          choreName: title.trim(),
+          description: description.trim(),
+          verifierId: secondaryVerifier
+            ? Number(secondaryVerifier)
+            : null
+        })
 
-      const assignedDate = [
-        today.getFullYear(),
-        String(today.getMonth() + 1).padStart(2, '0'),
-        String(today.getDate()).padStart(2, '0')
-      ].join('-')
+        const choreId = choreResponse.chore.chore_id
 
-      await assignChore({
-        choreId,
-        assignedTo: Number(assignedTo),
-        assignedDate,
-        dueDate,
-        priority
-      })
+        const today = new Date()
+
+        const assignedDate = [
+          today.getFullYear(),
+          String(today.getMonth() + 1).padStart(2, '0'),
+          String(today.getDate()).padStart(2, '0')
+        ].join('-')
+
+        await assignChore({
+          choreId,
+          assignedTo: Number(assignedTo),
+          assignedDate,
+          dueDate,
+          priority
+        })
+      }
 
       const assignments = await getDailyAssignments(groupId)
 
       setChores(formatAssignments(assignments))
 
-      setTitle('')
-      setDescription('')
-      setSecondaryVerifier('')
-      setDueDate('')
-      setPriority('Medium')
+      resetForm()
       setShowForm(false)
 
     } catch (error) {
@@ -253,7 +287,10 @@ function Chores() {
         </div>
 
         <button
-          onClick={() => setShowForm(true)}
+          onClick={() => {
+            setChoreType('manual')
+            setShowForm(true)
+          }}
           disabled={loading || !groupId}
           className="flex items-center justify-center gap-2 bg-green-600 text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-green-700 transition disabled:opacity-50"
         >
@@ -351,8 +388,8 @@ function Chores() {
                 key={item}
                 onClick={() => setFilter(item)}
                 className={`px-3 py-2 rounded-lg text-xs font-semibold transition ${filter === item
-                    ? 'bg-green-600 text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  ? 'bg-green-600 text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                   }`}
               >
                 {item}
@@ -400,18 +437,26 @@ function Chores() {
                     <div className="flex items-start gap-3">
 
                       <div className={`p-3 rounded-lg ${chore.status === 'Completed'
-                          ? 'bg-green-100 text-green-600'
-                          : chore.status === 'Awaiting Verification'
-                            ? 'bg-blue-100 text-blue-600'
-                            : 'bg-orange-100 text-orange-600'
+                        ? 'bg-green-100 text-green-600'
+                        : chore.status === 'Awaiting Verification'
+                          ? 'bg-blue-100 text-blue-600'
+                          : 'bg-orange-100 text-orange-600'
                         }`}>
                         <ClipboardList size={22} />
                       </div>
 
                       <div>
-                        <h3 className="font-semibold text-gray-800">
-                          {chore.title}
-                        </h3>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="font-semibold text-gray-800">
+                            {chore.title}
+                          </h3>
+
+                          {chore.choreType === 'rotation' && (
+                            <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-700">
+                              Daily Rotation
+                            </span>
+                          )}
+                        </div>
 
                         <p className="text-sm text-gray-500 mt-1">
                           {chore.description}
@@ -459,19 +504,19 @@ function Chores() {
                     <div className="flex flex-wrap items-center gap-3 md:justify-end">
 
                       <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${chore.priority === 'High'
-                          ? 'bg-red-100 text-red-600'
-                          : chore.priority === 'Medium'
-                            ? 'bg-yellow-100 text-yellow-700'
-                            : 'bg-blue-100 text-blue-600'
+                        ? 'bg-red-100 text-red-600'
+                        : chore.priority === 'Medium'
+                          ? 'bg-yellow-100 text-yellow-700'
+                          : 'bg-blue-100 text-blue-600'
                         }`}>
                         {chore.priority} Priority
                       </span>
 
                       <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${chore.status === 'Completed'
-                          ? 'bg-green-100 text-green-700'
-                          : chore.status === 'Awaiting Verification'
-                            ? 'bg-blue-100 text-blue-700'
-                            : 'bg-orange-100 text-orange-600'
+                        ? 'bg-green-100 text-green-700'
+                        : chore.status === 'Awaiting Verification'
+                          ? 'bg-blue-100 text-blue-700'
+                          : 'bg-orange-100 text-orange-600'
                         }`}>
                         {chore.status}
                       </span>
@@ -544,7 +589,10 @@ function Chores() {
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 relative max-h-[90vh] overflow-y-auto">
 
             <button
-              onClick={() => setShowForm(false)}
+              onClick={() => {
+                setShowForm(false)
+                resetForm()
+              }}
               className="absolute top-4 right-4 text-gray-400 hover:text-gray-700"
             >
               <X size={21} />
@@ -555,10 +603,34 @@ function Chores() {
             </h2>
 
             <p className="text-sm text-gray-500 mt-1 mb-6">
-              Create a household task and assign it to a member.
+              Create a household task for your group.
             </p>
 
             <form onSubmit={addChore} className="space-y-4">
+
+              {/* Chore Type */}
+              {isAdmin && (
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Chore Type
+                  </label>
+
+                  <select
+                    value={choreType}
+                    onChange={(e) => setChoreType(e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm outline-none focus:border-green-500 bg-white"
+                  >
+                    <option value="manual">Manual Chore</option>
+                    <option value="rotation">Daily Rotation Chore</option>
+                  </select>
+
+                  {choreType === 'rotation' && (
+                    <p className="text-xs text-purple-600 mt-2">
+                      This chore will be automatically assigned to group members in a balanced daily rotation.
+                    </p>
+                  )}
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -590,41 +662,77 @@ function Chores() {
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Assign To
-                </label>
+              {/* Manual Assignment Fields */}
+              {choreType === 'manual' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Assign To
+                    </label>
 
-                <select
-                  value={assignedTo}
-                  onChange={(e) => {
-                    setAssignedTo(e.target.value)
+                    <select
+                      value={assignedTo}
+                      onChange={(e) => {
+                        setAssignedTo(e.target.value)
 
-                    if (e.target.value === secondaryVerifier) {
-                      setSecondaryVerifier('')
-                    }
-                  }}
-                  required
-                  className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm outline-none focus:border-green-500 bg-white"
-                >
-                  <option value="">Select a member</option>
+                        if (e.target.value === secondaryVerifier) {
+                          setSecondaryVerifier('')
+                        }
+                      }}
+                      required
+                      className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm outline-none focus:border-green-500 bg-white"
+                    >
+                      <option value="">Select a member</option>
 
-                  {members
-                    .filter(
-                      (member) =>
-                        Number(member.user_id) !== currentUser?.id
-                    )
-                    .map((member) => (
-                      <option
-                        key={member.user_id}
-                        value={member.user_id}
-                      >
-                        {member.name || member.full_name || member.user_name}
-                      </option>
-                    ))}
-                </select>
-              </div>
+                      {members
+                        .filter(
+                          (member) =>
+                            Number(member.user_id) !== currentUser?.id
+                        )
+                        .map((member) => (
+                          <option
+                            key={member.user_id}
+                            value={member.user_id}
+                          >
+                            {member.name || member.full_name || member.user_name}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
 
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Due Date
+                    </label>
+
+                    <input
+                      type="date"
+                      value={dueDate}
+                      onChange={(e) => setDueDate(e.target.value)}
+                      required
+                      className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm outline-none focus:border-green-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Priority
+                    </label>
+
+                    <select
+                      value={priority}
+                      onChange={(e) => setPriority(e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm outline-none focus:border-green-500 bg-white"
+                    >
+                      <option value="Low">Low</option>
+                      <option value="Medium">Medium</option>
+                      <option value="High">High</option>
+                    </select>
+                  </div>
+                </>
+              )}
+
+              {/* Verifier */}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Secondary Verifier (Optional)
@@ -641,7 +749,10 @@ function Chores() {
                     .filter(
                       (member) =>
                         Number(member.user_id) !== currentUser?.id &&
-                        String(member.user_id) !== String(assignedTo)
+                        (
+                          choreType === 'rotation' ||
+                          String(member.user_id) !== String(assignedTo)
+                        )
                     )
                     .map((member) => (
                       <option
@@ -658,41 +769,14 @@ function Chores() {
                 </p>
               </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Due Date
-                </label>
-
-                <input
-                  type="date"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                  required
-                  className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm outline-none focus:border-green-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Priority
-                </label>
-
-                <select
-                  value={priority}
-                  onChange={(e) => setPriority(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm outline-none focus:border-green-500 bg-white"
-                >
-                  <option value="Low">Low</option>
-                  <option value="Medium">Medium</option>
-                  <option value="High">High</option>
-                </select>
-              </div>
-
               <div className="flex items-center gap-3 pt-3">
 
                 <button
                   type="button"
-                  onClick={() => setShowForm(false)}
+                  onClick={() => {
+                    setShowForm(false)
+                    resetForm()
+                  }}
                   className="flex-1 border border-gray-300 text-gray-700 py-2.5 rounded-lg text-sm font-semibold hover:bg-gray-50"
                 >
                   Cancel

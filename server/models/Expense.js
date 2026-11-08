@@ -1,136 +1,109 @@
 const sqlConnectionPool = require("../config/db");
 
 function createExpenseWithSplits(expenseData, splits) {
+  const { group_id, paid_by, title, amount, category, expense_date } =
+    expenseData;
 
-    const {
-        group_id,
-        paid_by,
-        title,
-        amount,
-        category,
-        expense_date
-    } = expenseData;
+  // Check that splits are provided
+  if (!Array.isArray(splits) || splits.length === 0) {
+    return Promise.reject(new Error("At least one split is required"));
+  }
 
-    // Check that splits are provided
-    if (!Array.isArray(splits) || splits.length === 0) {
-        return Promise.reject(new Error("At least one split is required"));
-    }
+  // Check whether split amounts equal the total expense
+  const totalSplit = splits.reduce(
+    (total, split) => total + Math.round(Number(split.share_amount) * 100),
+    0,
+  );
 
-    // Check whether split amounts equal the total expense
-    const totalSplit = splits.reduce(
-        (total, split) => total + Math.round(Number(split.share_amount) * 100),
-        0
+  if (totalSplit !== Math.round(Number(amount) * 100)) {
+    return Promise.reject(
+      new Error("Split amounts must equal the total expense"),
     );
+  }
 
-    if (totalSplit !== Math.round(Number(amount) * 100)) {
-        return Promise.reject(
-            new Error("Split amounts must equal the total expense")
-        );
-    }
+  return new Promise((resolve, reject) => {
+    // Step 1: Get database connection
+    sqlConnectionPool.getConnection((err, connection) => {
+      if (err) {
+        return reject(err);
+      }
 
-    return new Promise((resolve, reject) => {
+      // Step 2: Start transaction
+      connection.beginTransaction((err) => {
+        if (err) {
+          connection.release();
+          return reject(err);
+        }
 
-        // Step 1: Get database connection
-        sqlConnectionPool.getConnection((err, connection) => {
-
-            if (err) {
-                return reject(err);
-            }
-
-            // Step 2: Start transaction
-            connection.beginTransaction((err) => {
-
-                if (err) {
-                    connection.release();
-                    return reject(err);
-                }
-
-                // Step 3: Insert expense
-                const expenseSQL = `
+        // Step 3: Insert expense
+        const expenseSQL = `
                     INSERT INTO expenses
                     (group_id, paid_by, title, amount, category, expense_date)
                     VALUES (?, ?, ?, ?, ?, ?)
                 `;
 
-                connection.query(
-                    expenseSQL,
-                    [group_id, paid_by, title, amount, category, expense_date],
-                    (err, expenseResult) => {
+        connection.query(
+          expenseSQL,
+          [group_id, paid_by, title, amount, category, expense_date],
+          (err, expenseResult) => {
+            if (err) {
+              return rollback(err);
+            }
 
-                        if (err) {
-                            return rollback(err);
-                        }
+            // Step 4: Get newly generated expense ID
+            const expenseId = expenseResult.insertId;
 
-                        // Step 4: Get newly generated expense ID
-                        const expenseId = expenseResult.insertId;
+            // Step 5: Prepare split records
+            const splitValues = splits.map((split) => [
+              expenseId,
+              split.user_id,
+              split.share_amount,
+            ]);
 
-                        // Step 5: Prepare split records
-                        const splitValues = splits.map(split => [
-                            expenseId,
-                            split.user_id,
-                            split.share_amount
-                        ]);
-
-                        const splitSQL = `
+            const splitSQL = `
                             INSERT INTO expense_splits
                             (expense_id, user_id, share_amount)
                             VALUES ?
                         `;
 
-                        // Step 6: Insert all splits
-                        connection.query(
-                            splitSQL,
-                            [splitValues],
-                            (err, splitResult) => {
+            // Step 6: Insert all splits
+            connection.query(splitSQL, [splitValues], (err, splitResult) => {
+              if (err) {
+                return rollback(err);
+              }
 
-                                if (err) {
-                                    return rollback(err);
-                                }
-
-                                // Step 7: Commit transaction
-                                connection.commit((err) => {
-
-                                    if (err) {
-                                        return rollback(err);
-                                    }
-
-                                    connection.release();
-
-                                    resolve({
-                                        message: "Expense and splits created successfully",
-                                        expense_id: expenseId,
-                                        splits_created: splitResult.affectedRows
-                                    });
-
-                                });
-
-                            }
-                        );
-
-                    }
-                );
-
-                // Rollback helper
-                function rollback(error) {
-
-                    connection.rollback(() => {
-                        connection.release();
-                        reject(error);
-                    });
-
+              // Step 7: Commit transaction
+              connection.commit((err) => {
+                if (err) {
+                  return rollback(err);
                 }
 
+                connection.release();
+
+                resolve({
+                  message: "Expense and splits created successfully",
+                  expense_id: expenseId,
+                  splits_created: splitResult.affectedRows,
+                });
+              });
             });
+          },
+        );
 
-        });
-
+        // Rollback helper
+        function rollback(error) {
+          connection.rollback(() => {
+            connection.release();
+            reject(error);
+          });
+        }
+      });
     });
+  });
 }
 
-
 function getGroupExpenses(groupId) {
-
-    const sql = `
+  const sql = `
         SELECT
             e.expense_id,
             e.group_id,
@@ -147,23 +120,19 @@ function getGroupExpenses(groupId) {
         ORDER BY e.expense_date DESC
     `;
 
-    return new Promise((resolve, reject) => {
+  return new Promise((resolve, reject) => {
+    sqlConnectionPool.query(sql, [groupId], (err, result) => {
+      if (err) {
+        return reject(err);
+      }
 
-        sqlConnectionPool.query(sql, [groupId], (err, result) => {
-
-            if (err) {
-                return reject(err);
-            }
-
-            resolve(result);
-        });
+      resolve(result);
     });
+  });
 }
 
-
 function findById(expenseId) {
-
-    const sql = `
+  const sql = `
         SELECT
             e.expense_id,
             e.group_id,
@@ -179,30 +148,25 @@ function findById(expenseId) {
         WHERE e.expense_id = ?
     `;
 
-    return new Promise((resolve, reject) => {
+  return new Promise((resolve, reject) => {
+    sqlConnectionPool.query(sql, [expenseId], (err, result) => {
+      if (err) {
+        return reject(err);
+      }
 
-        sqlConnectionPool.query(sql, [expenseId], (err, result) => {
+      if (result.length === 0) {
+        return resolve(null);
+      }
 
-            if (err) {
-                return reject(err);
-            }
-
-            if (result.length === 0) {
-                return resolve(null);
-            }
-
-            resolve(result[0]);
-
-        });
-
+      resolve(result[0]);
     });
+  });
 }
 
 function updateExpense(expenseId, data) {
+  const { title, amount, category, expense_date } = data;
 
-    const { title, amount, category, expense_date } = data;
-
-    const sql = `
+  const sql = `
         UPDATE expenses
         SET title = ?,
             amount = ?,
@@ -211,112 +175,98 @@ function updateExpense(expenseId, data) {
         WHERE expense_id = ?
     `;
 
-    return new Promise((resolve, reject) => {
+  return new Promise((resolve, reject) => {
+    sqlConnectionPool.query(
+      sql,
+      [title, amount, category, expense_date, expenseId],
+      (err, result) => {
+        if (err) return reject(err);
 
-        sqlConnectionPool.query(
-            sql,
-            [title, amount, category, expense_date, expenseId],
-            (err, result) => {
+        if (result.affectedRows === 0) {
+          return resolve({
+            message: "Expense not found",
+          });
+        }
 
-                if (err) return reject(err);
-
-                if (result.affectedRows === 0) {
-                    return resolve({
-                        message: "Expense not found"
-                    });
-                }
-
-                resolve({
-                    message: "Expense updated successfully"
-                });
-            }
-        );
-    });
+        resolve({
+          message: "Expense updated successfully",
+        });
+      },
+    );
+  });
 }
 
 function deleteExpense(expenseId) {
+  return new Promise((resolve, reject) => {
+    sqlConnectionPool.getConnection((err, connection) => {
+      if (err) return reject(err);
 
-    return new Promise((resolve, reject) => {
+      connection.beginTransaction((err) => {
+        if (err) {
+          connection.release();
+          return reject(err);
+        }
 
-        sqlConnectionPool.getConnection((err, connection) => {
-
-            if (err) return reject(err);
-
-            connection.beginTransaction((err) => {
-
-                if (err) {
-                    connection.release();
-                    return reject(err);
-                }
-
-                // First delete expense splits
-                const deleteSplits = `
+        // First delete expense splits
+        const deleteSplits = `
                     DELETE FROM expense_splits
                     WHERE expense_id = ?
                 `;
 
-                connection.query(deleteSplits, [expenseId], (err) => {
+        connection.query(deleteSplits, [expenseId], (err) => {
+          if (err) {
+            return connection.rollback(() => {
+              connection.release();
+              reject(err);
+            });
+          }
 
-                    if (err) {
-                        return connection.rollback(() => {
-                            connection.release();
-                            reject(err);
-                        });
-                    }
-
-                    // Then delete the main expense
-                    const deleteExpenseSql = `
+          // Then delete the main expense
+          const deleteExpenseSql = `
                         DELETE FROM expenses
                         WHERE expense_id = ?
                     `;
 
-                    connection.query(
-                        deleteExpenseSql,
-                        [expenseId],
-                        (err, result) => {
+          connection.query(deleteExpenseSql, [expenseId], (err, result) => {
+            if (err) {
+              return connection.rollback(() => {
+                connection.release();
+                reject(err);
+              });
+            }
 
-                            if (err) {
-                                return connection.rollback(() => {
-                                    connection.release();
-                                    reject(err);
-                                });
-                            }
-
-                            if (result.affectedRows === 0) {
-                                return connection.rollback(() => {
-                                    connection.release();
-                                    resolve({
-                                        message: "Expense not found"
-                                    });
-                                });
-                            }
-
-                            connection.commit((err) => {
-
-                                if (err) {
-                                    return connection.rollback(() => {
-                                        connection.release();
-                                        reject(err);
-                                    });
-                                }
-
-                                connection.release();
-
-                                resolve({
-                                    message: "Expense and splits deleted successfully"
-                                });
-                            });
-                        }
-                    );
+            if (result.affectedRows === 0) {
+              return connection.rollback(() => {
+                connection.release();
+                resolve({
+                  message: "Expense not found",
                 });
+              });
+            }
+
+            connection.commit((err) => {
+              if (err) {
+                return connection.rollback(() => {
+                  connection.release();
+                  reject(err);
+                });
+              }
+
+              connection.release();
+
+              resolve({
+                message: "Expense and splits deleted successfully",
+              });
             });
+          });
         });
+      });
     });
+  });
 }
 
 function getExpenseSplits(expenseId) {
-
-    const sql = `
+  const sql = `
         SELECT
             es.split_id,
             es.expense_id,
@@ -329,21 +279,17 @@ function getExpenseSplits(expenseId) {
         WHERE es.expense_id = ?
     `;
 
-    return new Promise((resolve, reject) => {
+  return new Promise((resolve, reject) => {
+    sqlConnectionPool.query(sql, [expenseId], (err, result) => {
+      if (err) return reject(err);
 
-        sqlConnectionPool.query(sql, [expenseId], (err, result) => {
-
-            if (err) return reject(err);
-
-            resolve(result);
-        });
+      resolve(result);
     });
+  });
 }
 
-
 function getUserExpenses(userId) {
-
-    const sql = `
+  const sql = `
         SELECT DISTINCT
             e.expense_id,
             e.group_id,
@@ -375,31 +321,23 @@ function getUserExpenses(userId) {
         ORDER BY e.expense_date DESC
     `;
 
-    return new Promise((resolve, reject) => {
+  return new Promise((resolve, reject) => {
+    sqlConnectionPool.query(sql, [userId, userId, userId], (err, result) => {
+      if (err) return reject(err);
 
-        sqlConnectionPool.query(
-            sql,
-            [userId, userId, userId],
-            (err, result) => {
-
-                if (err) return reject(err);
-
-                resolve(result);
-            }
-        );
+      resolve(result);
     });
+  });
 }
 
 module.exports = {
-    // createExpense,
-    // createExpenseSplits,
-    createExpenseWithSplits,
-    getGroupExpenses,
-    findById,
-    updateExpense,
-    deleteExpense,
-    getExpenseSplits,
-    getUserExpenses
+  // createExpense,
+  // createExpenseSplits,
+  createExpenseWithSplits,
+  getGroupExpenses,
+  findById,
+  updateExpense,
+  deleteExpense,
+  getExpenseSplits,
+  getUserExpenses,
 };
-
-

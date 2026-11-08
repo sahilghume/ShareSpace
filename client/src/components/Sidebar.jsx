@@ -96,8 +96,9 @@ function Sidebar() {
       {/* Sidebar */}
       <aside
         className={`
-          fixed md:static top-0 left-0 z-50
-          w-64 min-h-screen bg-white border-r border-gray-200
+          fixed top-0 left-0 z-50
+w-64 h-screen bg-white border-r border-gray-200
+overflow-y-auto
           flex flex-col
           transform transition-transform duration-300
           md:translate-x-0
@@ -146,10 +147,9 @@ function Sidebar() {
                   to={item.path}
                   onClick={() => setIsOpen(false)}
                   className={({ isActive }) =>
-                    `flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                      isActive
-                        ? "bg-green-100 text-green-700 font-semibold"
-                        : "text-gray-600 hover:bg-green-50 hover:text-green-700"
+                    `flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${isActive
+                      ? "bg-green-100 text-green-700 font-semibold"
+                      : "text-gray-600 hover:bg-green-50 hover:text-green-700"
                     }`
                   }
                 >
