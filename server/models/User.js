@@ -96,25 +96,134 @@ function findToken(jti) {
 
 function deleteToken(jti) {
   const sql = `
-        DELETE FROM user_tokens
-        WHERE jti = ?
-    `;
+    DELETE FROM user_tokens
+    WHERE jti = ?
+  `;
 
   return new Promise((resolve, reject) => {
     sqlConnectionPool.query(sql, [jti], (err, result) => {
-      if (err) {
-        reject(err);
-      } else {
+      if (err) return reject(err);
+      resolve(result);
+    });
+  });
+}
+
+function deleteAllUserTokens(userId) {
+  const sql = `
+    DELETE FROM user_tokens
+    WHERE user_id = ?
+  `;
+
+  return new Promise((resolve, reject) => {
+    sqlConnectionPool.query(sql, [userId], (err, result) => {
+      if (err) return reject(err);
+      resolve(result);
+    });
+  });
+}
+function updateProfile(userId, name, phone) {
+  const sql = `
+    UPDATE users
+    SET name = ?, phone = ?
+    WHERE user_id = ?
+  `;
+
+  return new Promise((resolve, reject) => {
+    sqlConnectionPool.query(sql, [name, phone, userId], (err, result) => {
+      if (err) return reject(err);
+      resolve(result);
+    });
+  });
+}
+
+function findPasswordById(userId) {
+  const sql = `
+    SELECT password
+    FROM users
+    WHERE user_id = ?
+  `;
+
+  return new Promise((resolve, reject) => {
+    sqlConnectionPool.query(sql, [userId], (err, result) => {
+      if (err) return reject(err);
+      resolve(result[0] || null);
+    });
+  });
+}
+
+function updatePassword(userId, hashedPassword) {
+  const sql = `
+    UPDATE users
+    SET password = ?
+    WHERE user_id = ?
+  `;
+
+  return new Promise((resolve, reject) => {
+    sqlConnectionPool.query(sql, [hashedPassword, userId], (err, result) => {
+      if (err) return reject(err);
+      resolve(result);
+    });
+  });
+}
+
+function createPasswordReset(userId, tokenHash, expiresAt) {
+  const sql = `
+    INSERT INTO password_resets (user_id, token_hash, expires_at)
+    VALUES (?, ?, ?)
+  `;
+
+  return new Promise((resolve, reject) => {
+    sqlConnectionPool.query(
+      sql,
+      [userId, tokenHash, expiresAt],
+      (err, result) => {
+        if (err) return reject(err);
         resolve(result);
-      }
+      },
+    );
+  });
+}
+
+function findPasswordReset(tokenHash) {
+  const sql = `
+    SELECT * FROM password_resets
+    WHERE token_hash = ?
+    AND expires_at > NOW()
+  `;
+
+  return new Promise((resolve, reject) => {
+    sqlConnectionPool.query(sql, [tokenHash], (err, result) => {
+      if (err) return reject(err);
+      resolve(result[0] || null);
+    });
+  });
+}
+
+function deletePasswordReset(userId) {
+  const sql = `
+    DELETE FROM password_resets
+    WHERE user_id = ?
+  `;
+
+  return new Promise((resolve, reject) => {
+    sqlConnectionPool.query(sql, [userId], (err, result) => {
+      if (err) return reject(err);
+      resolve(result);
     });
   });
 }
 module.exports = {
+  createPasswordReset,
+  findPasswordReset,
+  deletePasswordReset,
   createUser,
   findByEmail,
   findById,
   saveToken,
   findToken,
   deleteToken,
+  updateProfile,
+  findPasswordById,
+  updatePassword,
+  deleteAllUserTokens,
 };

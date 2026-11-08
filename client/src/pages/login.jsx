@@ -1,12 +1,7 @@
-
 import { useState } from "react";
-
 import { Eye, EyeOff, House } from "lucide-react";
-import { Link, useNavigate,useLocation } from "react-router-dom";
-
-
-import { loginUser } from "../services/api";
-import { getUserGroup } from "../services/groupStorage";
+import { Link, useNavigate, useLocation } from "react-router-dom";
+import { getMyGroups } from "../services/groupService";
 
 function Login() {
   const navigate = useNavigate();
@@ -15,59 +10,65 @@ function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-
-  
   const [loading, setLoading] = useState(false);
-
-  // Message received after successful registration
-  const registrationMessage = location.state?.message;
-
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const navigate = useNavigate();
 
+  const registrationMessage = location.state?.message;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     setError("");
-setMessage("");
-setError("");
+    setMessage("");
 
-try {
-  setLoading(true);
+    try {
+      setLoading(true);
 
-  const response = await fetch(
-    "http://localhost:5000/api/auth/login",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        email: email.trim().toLowerCase(),
-        password,
-      }),
+      const response = await fetch(
+        "http://localhost:5000/api/auth/login",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email: email.trim().toLowerCase(),
+            password,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Login failed.");
+      }
+
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("user", JSON.stringify(data.user));
+
+      try {
+        const groups = await getMyGroups();
+
+        if (groups && groups.length > 0) {
+          navigate("/dashboard", { replace: true });
+        } else {
+          navigate("/group-setup", { replace: true });
+        }
+      } catch (groupError) {
+        console.error("Group Check Error:", groupError);
+        setError("Login successful, but unable to check group membership. Please try again.");
+      }
+
+    } catch (error) {
+      console.error("Login Error:", error);
+      setError(error.message || "Login failed. Please check your credentials.");
+    } finally {
+      setLoading(false);
     }
-  );
+  };
 
-  const data = await response.json();
-
-  if (!response.ok) {
-    throw new Error(data.message || "Login failed.");
-  }
-
-  localStorage.setItem("token", data.token);
-  localStorage.setItem("user", JSON.stringify(data.user));
-
-  navigate("/dashboard", { replace: true });
-
-} catch (error) {
-  console.error("Login Error:", error);
-  setError(error.message || "Login failed. Please check your credentials.");
-} finally {
-  setLoading(false);
-}
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-10">
       <div className="w-full max-w-md">
@@ -109,10 +110,7 @@ try {
                 value={email}
                 onChange={(e) => {
                   setEmail(e.target.value);
-
-
                   setMessage("");
-
                   setError("");
                 }}
                 placeholder="Enter your email"
@@ -138,6 +136,14 @@ try {
                   required
                   className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
                 />
+                <div className="flex justify-end">
+                  <Link
+                    to="/forgot-password"
+                    className="text-sm text-green-600 font-semibold hover:text-green-700"
+                  >
+                    Forgot Password?
+                  </Link>
+                </div>
 
                 <button
                   type="button"

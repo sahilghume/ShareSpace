@@ -4,7 +4,8 @@ const Group = require("../models/Group");
 // 1. Add shopping item
 const addShoppingItem = async (req, res) => {
   try {
-    const { groupId, itemName, quantity } = req.body;
+    const { groupId, itemName, quantity, assignedTo, verifierId } = req.body;
+
     const userId = req.user.id;
 
     if (!groupId || typeof itemName !== "string" || !itemName.trim()) {
@@ -24,6 +25,13 @@ const addShoppingItem = async (req, res) => {
       });
     }
 
+    if (!assignedTo) {
+      return res.status(400).json({
+        success: false,
+        message: "Assigned member is required",
+      });
+    }
+
     const member = await Group.findMember(groupId, userId);
 
     if (!member) {
@@ -33,11 +41,54 @@ const addShoppingItem = async (req, res) => {
       });
     }
 
+    const assignedMember = await Group.findMember(groupId, assignedTo);
+
+    if (!assignedMember) {
+      return res.status(400).json({
+        success: false,
+        message: "Assigned user must be a group member",
+      });
+    }
+
+    if (Number(assignedTo) === Number(userId)) {
+      return res.status(400).json({
+        success: false,
+        message: "You cannot assign the item to yourself",
+      });
+    }
+
+    let verifierIdValue = null;
+
+    if (verifierId) {
+      const verifier = await Group.findMember(groupId, verifierId);
+
+      if (!verifier) {
+        return res.status(400).json({
+          success: false,
+          message: "Verifier must be a group member",
+        });
+      }
+
+      if (
+        Number(verifierId) === Number(assignedTo) ||
+        Number(verifierId) === Number(userId)
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Verifier must be different from creator and assignee",
+        });
+      }
+
+      verifierIdValue = verifierId;
+    }
+
     const item = await ShoppingItem.createItem({
       group_id: groupId,
       item_name: itemName.trim(),
-      quantity: quantity || 1,
+      quantity: quantity ?? 1,
       added_by: userId,
+      assigned_to: assignedTo,
+      verifier_id: verifierIdValue,
     });
 
     return res.status(201).json({
@@ -47,6 +98,7 @@ const addShoppingItem = async (req, res) => {
     });
   } catch (error) {
     console.error("Add Shopping Item Error:", error);
+
     return res.status(500).json({
       success: false,
       message: "Unable to add shopping item",
@@ -78,6 +130,7 @@ const getShoppingItems = async (req, res) => {
     });
   } catch (error) {
     console.error("Get Shopping Items Error:", error);
+
     return res.status(500).json({
       success: false,
       message: "Unable to fetch shopping items",
@@ -98,6 +151,13 @@ const updateShoppingItem = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: "Shopping item not found",
+      });
+    }
+
+    if (Number(item.added_by) !== Number(userId)) {
+      return res.status(403).json({
+        success: false,
+        message: "Only the creator can update this item",
       });
     }
 
@@ -149,6 +209,7 @@ const updateShoppingItem = async (req, res) => {
     });
   } catch (error) {
     console.error("Update Shopping Item Error:", error);
+
     return res.status(500).json({
       success: false,
       message: "Unable to update shopping item",
@@ -156,19 +217,11 @@ const updateShoppingItem = async (req, res) => {
   }
 };
 
-// 4. Update shopping item status
-const updateItemStatus = async (req, res) => {
+// 4. Submit item for verification
+const submitItemForVerification = async (req, res) => {
   try {
     const itemId = req.params.id;
-    const { status } = req.body;
     const userId = req.user.id;
-
-    if (!["Needed", "Purchased"].includes(status)) {
-      return res.status(400).json({
-        success: false,
-        message: "Status must be Needed or Purchased",
-      });
-    }
 
     const item = await ShoppingItem.findById(itemId);
 
@@ -179,31 +232,85 @@ const updateItemStatus = async (req, res) => {
       });
     }
 
-    const member = await Group.findMember(item.group_id, userId);
-
-    if (!member) {
+    if (Number(item.assigned_to) !== Number(userId)) {
       return res.status(403).json({
         success: false,
-        message: "You are not a member of this group",
+        message: "Only the assigned member can submit this item",
       });
     }
 
-    await ShoppingItem.updateStatus(itemId, status);
+    if (item.status !== "Pending") {
+      return res.status(400).json({
+        success: false,
+        message: "Only pending items can be submitted",
+      });
+    }
+
+    await ShoppingItem.submitForVerification(itemId, userId);
 
     return res.status(200).json({
       success: true,
-      message: "Shopping item status updated successfully",
+      message: "Item submitted for verification successfully",
     });
   } catch (error) {
-    console.error("Update Shopping Status Error:", error);
+    console.error("Submit Shopping Item Error:", error);
+
     return res.status(500).json({
       success: false,
-      message: "Unable to update shopping status",
+      message: "Unable to submit item for verification",
     });
   }
 };
 
-// 5. Delete shopping item
+// 5. Approve shopping item
+const approveShoppingItem = async (req, res) => {
+  try {
+    const itemId = req.params.id;
+    const userId = req.user.id;
+
+    const item = await ShoppingItem.findById(itemId);
+
+    if (!item) {
+      return res.status(404).json({
+        success: false,
+        message: "Shopping item not found",
+      });
+    }
+
+    if (
+      Number(item.added_by) !== Number(userId) &&
+      Number(item.verifier_id) !== Number(userId)
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to verify this item",
+      });
+    }
+
+    if (item.status !== "Awaiting Verification") {
+      return res.status(400).json({
+        success: false,
+        message: "Item is not awaiting verification",
+      });
+    }
+
+    await ShoppingItem.approveItem(itemId, userId);
+
+    return res.status(200).json({
+      success: true,
+      message: "Shopping item approved successfully",
+    });
+  } catch (error) {
+    console.error("Approve Shopping Item Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to approve shopping item",
+    });
+  }
+};
+
+// 6. Delete shopping item
 const deleteShoppingItem = async (req, res) => {
   try {
     const itemId = req.params.id;
@@ -218,16 +325,14 @@ const deleteShoppingItem = async (req, res) => {
       });
     }
 
-    const member = await Group.findMember(item.group_id, userId);
-
-    if (!member || member.role !== "admin") {
+    if (Number(item.added_by) !== Number(userId)) {
       return res.status(403).json({
         success: false,
-        message: "Only group admin can delete shopping items",
+        message: "Only the creator can delete this item",
       });
     }
 
-    await ShoppingItem.deleteItem(itemId);
+    await ShoppingItem.deleteItem(itemId, userId);
 
     return res.status(200).json({
       success: true,
@@ -235,6 +340,7 @@ const deleteShoppingItem = async (req, res) => {
     });
   } catch (error) {
     console.error("Delete Shopping Item Error:", error);
+
     return res.status(500).json({
       success: false,
       message: "Unable to delete shopping item",
@@ -246,6 +352,7 @@ module.exports = {
   addShoppingItem,
   getShoppingItems,
   updateShoppingItem,
-  updateItemStatus,
+  submitItemForVerification,
+  approveShoppingItem,
   deleteShoppingItem,
 };

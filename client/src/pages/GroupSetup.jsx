@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -7,100 +6,71 @@ import {
   Users,
   Plus,
   KeyRound,
-  MapPin,
 } from "lucide-react";
 
 import {
   createGroup,
-  joinGroup
-} from "../services/groupStorage";
+  joinGroup,
+} from "../services/groupService";
 
 function GroupSetup() {
   const navigate = useNavigate();
 
   const [activeOption, setActiveOption] = useState("create");
-
-  const [groupData, setGroupData] = useState({
-    name: "",
-    description: "",
-    address: ""
-  });
-
-  const [inviteCode, setInviteCode] = useState("");
-
+  const [groupName, setGroupName] = useState("");
+  const [groupCode, setGroupCode] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  // Get the currently logged-in user
-  const currentUser = JSON.parse(
-    localStorage.getItem("sharespace_current_user")
-  );
-
-  // Handle group form changes
-  const handleGroupChange = (e) => {
-    const { name, value } = e.target;
-
-    setGroupData({
-      ...groupData,
-      [name]: value
-    });
-
-    setError("");
-  };
-
-  // Create a new group
-  const handleCreateGroup = (e) => {
+  const handleCreateGroup = async (e) => {
     e.preventDefault();
+    setError("");
 
-    if (!groupData.name.trim()) {
+    if (!groupName.trim()) {
       setError("Please enter a group name.");
       return;
     }
 
-    if (!groupData.description.trim()) {
-      setError("Please enter a group description.");
-      return;
-    }
-
-    if (!groupData.address.trim()) {
-      setError("Please enter the accommodation address.");
-      return;
-    }
-
     try {
-      createGroup(currentUser, groupData);
+      setLoading(true);
+
+      await createGroup(groupName.trim());
 
       navigate("/dashboard", { replace: true });
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Unable to create group.");
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Join an existing group
-  const handleJoinGroup = (e) => {
+  const handleJoinGroup = async (e) => {
     e.preventDefault();
+    setError("");
 
-    if (!inviteCode.trim()) {
-      setError("Please enter an invite code.");
+    if (!groupCode.trim()) {
+      setError("Please enter a group code.");
       return;
     }
 
     try {
-      joinGroup(currentUser, inviteCode);
+      setLoading(true);
+
+      await joinGroup(groupCode.trim().toUpperCase());
 
       navigate("/dashboard", { replace: true });
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Unable to join group.");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-10">
-
       <div className="w-full max-w-2xl">
 
-        {/* Header */}
         <div className="text-center mb-8">
-
           <div className="inline-flex items-center justify-center w-14 h-14 bg-green-600 rounded-2xl mb-4">
             <House className="text-white" size={28} />
           </div>
@@ -112,14 +82,11 @@ function GroupSetup() {
           <p className="text-gray-500 mt-2">
             Your shared home, managed together.
           </p>
-
         </div>
 
-        {/* Main Card */}
         <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 sm:p-8">
 
           <div className="text-center mb-7">
-
             <h2 className="text-2xl font-bold text-gray-900">
               Set Up Your Group
             </h2>
@@ -127,23 +94,19 @@ function GroupSetup() {
             <p className="text-gray-500 mt-2">
               Create a new group or join an existing one.
             </p>
-
           </div>
 
-          {/* Option Selection */}
           <div className="grid grid-cols-2 gap-3 mb-7">
-
             <button
               type="button"
               onClick={() => {
                 setActiveOption("create");
                 setError("");
               }}
-              className={`flex items-center justify-center gap-2 py-3 px-2 rounded-lg border font-semibold transition ${
-                activeOption === "create"
+              className={`flex items-center justify-center gap-2 py-3 px-2 rounded-lg border font-semibold transition ${activeOption === "create"
                   ? "bg-green-600 text-white border-green-600"
                   : "bg-white text-gray-600 border-gray-300 hover:border-green-500"
-              }`}
+                }`}
             >
               <Plus size={18} />
               Create Group
@@ -155,21 +118,17 @@ function GroupSetup() {
                 setActiveOption("join");
                 setError("");
               }}
-              className={`flex items-center justify-center gap-2 py-3 px-2 rounded-lg border font-semibold transition ${
-                activeOption === "join"
+              className={`flex items-center justify-center gap-2 py-3 px-2 rounded-lg border font-semibold transition ${activeOption === "join"
                   ? "bg-green-600 text-white border-green-600"
                   : "bg-white text-gray-600 border-gray-300 hover:border-green-500"
-              }`}
+                }`}
             >
               <Users size={18} />
               Join Group
             </button>
-
           </div>
 
-          {/* Create Group Form */}
           {activeOption === "create" && (
-
             <form onSubmit={handleCreateGroup} className="space-y-5">
 
               <div>
@@ -179,79 +138,36 @@ function GroupSetup() {
 
                 <input
                   type="text"
-                  name="name"
-                  value={groupData.name}
-                  onChange={handleGroupChange}
+                  value={groupName}
+                  onChange={(e) => {
+                    setGroupName(e.target.value);
+                    setError("");
+                  }}
                   placeholder="Enter your group name"
                   required
+                  disabled={loading}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Description
-                </label>
-
-                <textarea
-                  name="description"
-                  value={groupData.description}
-                  onChange={handleGroupChange}
-                  placeholder="Describe your group"
-                  rows={3}
-                  required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg outline-none resize-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Accommodation Address
-                </label>
-
-                <div className="relative">
-
-                  <MapPin
-                    size={19}
-                    className="absolute left-4 top-4 text-gray-400"
-                  />
-
-                  <textarea
-                    name="address"
-                    value={groupData.address}
-                    onChange={handleGroupChange}
-                    placeholder="Enter your accommodation address"
-                    rows={2}
-                    required
-                    className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg outline-none resize-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                  />
-
-                </div>
-              </div>
-
               {error && (
-                <p className="text-sm text-red-600">
-                  {error}
-                </p>
+                <p className="text-sm text-red-600">{error}</p>
               )}
 
               <button
                 type="submit"
-                className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-lg transition duration-200"
+                disabled={loading}
+                className="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white font-semibold py-3 rounded-lg transition duration-200"
               >
-                Create Group
+                {loading ? "Creating Group..." : "Create Group"}
               </button>
-
             </form>
           )}
 
-          {/* Join Group Form */}
           {activeOption === "join" && (
-
             <form onSubmit={handleJoinGroup} className="space-y-5">
 
               <div className="text-center mb-5">
-
                 <div className="inline-flex items-center justify-center w-14 h-14 bg-green-50 rounded-full mb-3">
                   <KeyRound className="text-green-600" size={26} />
                 </div>
@@ -261,54 +177,49 @@ function GroupSetup() {
                 </h3>
 
                 <p className="text-sm text-gray-500 mt-2">
-                  Ask an existing group member for their invite code.
+                  Ask an existing group member for their group code.
                 </p>
-
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Invite Code
+                  Group Code
                 </label>
 
                 <input
                   type="text"
-                  value={inviteCode}
+                  value={groupCode}
                   onChange={(e) => {
-                    setInviteCode(e.target.value);
+                    setGroupCode(e.target.value);
                     setError("");
                   }}
-                  placeholder="Enter invite code"
+                  placeholder="Enter group code"
                   required
+                  disabled={loading}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg outline-none uppercase focus:ring-2 focus:ring-green-500 focus:border-green-500"
                 />
               </div>
 
               {error && (
-                <p className="text-sm text-red-600">
-                  {error}
-                </p>
+                <p className="text-sm text-red-600">{error}</p>
               )}
 
               <button
                 type="submit"
-                className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-lg transition duration-200"
+                disabled={loading}
+                className="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white font-semibold py-3 rounded-lg transition duration-200"
               >
-                Join Group
+                {loading ? "Joining Group..." : "Join Group"}
               </button>
-
             </form>
           )}
-
         </div>
 
-        {/* Footer */}
         <p className="text-center text-xs text-gray-400 mt-6">
           ShareSpace · Live better, together.
         </p>
 
       </div>
-
     </div>
   );
 }

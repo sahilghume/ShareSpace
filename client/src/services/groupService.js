@@ -78,3 +78,56 @@ export const transferAdminAndLeave = async (groupId, newAdminId) => {
 
   return data;
 };
+
+export const deleteGroup = async (groupId) => {
+  const response = await fetch(`${API_URL}/${groupId}`, {
+    method: "DELETE",
+    headers: getHeaders(),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.message || "Failed to delete group");
+  }
+
+  return data;
+};
+
+export const createGroup = async (groupName) => {
+  const response = await fetch(`${API_URL}/create`, {
+    method: "POST",
+    headers: {
+      ...getHeaders(),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ groupName }),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.message || "Failed to create group");
+  }
+
+  return data;
+};
+
+export const joinGroup = async (groupCode) => {
+  const response = await fetch(`${API_URL}/join`, {
+    method: "POST",
+    headers: {
+      ...getHeaders(),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ groupCode }),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.message || "Failed to join group");
+  }
+
+  return data;
+};

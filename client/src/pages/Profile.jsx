@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   UserRound,
@@ -14,37 +14,37 @@ import {
   KeyRound
 } from "lucide-react";
 
-import { getCurrentUser } from "../services/api";
+import {
+  getCurrentUser,
+  fetchProfile,
+  updateProfile,
+  changePassword,
+} from "../services/api";
 
 function Profile() {
 
   // Get logged-in user and saved profile information
-  
 
-const [profile, setProfile] = useState(() => {
-  const currentUser = getCurrentUser();
 
-  const savedProfile = (() => {
+  const [profile, setProfile] = useState(() => {
+    const currentUser = getCurrentUser();
+
+    let savedProfile = {};
+
     try {
-      return JSON.parse(
-        localStorage.getItem("sharespace_profile")
-      ) || {};
+      savedProfile =
+        JSON.parse(localStorage.getItem("sharespace_profile")) || {};
     } catch {
-      return {};
+      savedProfile = {};
     }
-  })();
 
-  return {
-    name: savedProfile.name || currentUser?.name || "User",
-    email: currentUser?.email || savedProfile.email || "",
-    phoneNumber:
-      savedProfile.phoneNumber ||
-      currentUser?.phoneNumber ||
-      currentUser?.phone ||
-      "",
-    image: savedProfile.image || ""
-  };
-});
+    return {
+      name: currentUser?.name || "User",
+      email: currentUser?.email || "",
+      phoneNumber: currentUser?.phone || "",
+      image: savedProfile.image || "",
+    };
+  });
 
 
 
@@ -64,6 +64,32 @@ const [profile, setProfile] = useState(() => {
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        const user = await fetchProfile();
+
+        const savedProfile = JSON.parse(
+          localStorage.getItem("sharespace_profile") || "{}"
+        );
+
+        const updatedProfile = {
+          name: user.name || "User",
+          email: user.email || "",
+          phoneNumber: user.phone || "",
+          image: savedProfile.image || "",
+        };
+
+        setProfile(updatedProfile);
+        setFormData(updatedProfile);
+      } catch (err) {
+        setError(err.message);
+      }
+    };
+
+    loadProfile();
+  }, []);
 
   // Handle profile input changes
   const handleChange = (e) => {
@@ -96,41 +122,36 @@ const [profile, setProfile] = useState(() => {
   };
 
   // Save profile information
-  const handleSave = (e) => {
+  const handleSave = async (e) => {
     e.preventDefault();
 
-    const updatedProfile = {
-      ...formData,
-      name: formData.name.trim(),
-      phoneNumber: formData.phoneNumber.trim()
-    };
+    try {
+      const updatedUser = await updateProfile({
+        name: formData.name.trim(),
+        phone: formData.phoneNumber.trim(),
+      });
 
-    // Save profile information
-    localStorage.setItem(
-      "sharespace_profile",
-      JSON.stringify(updatedProfile)
-    );
-
-    // Update current logged-in user information
-    const currentUser = getCurrentUser();
-
-    if (currentUser) {
-      const updatedUser = {
-        ...currentUser,
-        name: updatedProfile.name,
-        phoneNumber: updatedProfile.phoneNumber
+      const updatedProfile = {
+        name: updatedUser.name,
+        email: updatedUser.email,
+        phoneNumber: updatedUser.phone || "",
+        image: formData.image,
       };
 
       localStorage.setItem(
-        "sharespace_current_user",
-        JSON.stringify(updatedUser)
+        "sharespace_profile",
+        JSON.stringify(updatedProfile)
       );
-    }
 
-    setProfile(updatedProfile);
-    setFormData(updatedProfile);
-    setIsEditing(false);
-    setMessage("Profile updated successfully.");
+      setProfile(updatedProfile);
+      setFormData(updatedProfile);
+      setIsEditing(false);
+      setError("");
+      setMessage("Profile updated successfully.");
+    } catch (err) {
+      setError(err.message);
+      setMessage("");
+    }
   };
 
   // Cancel profile editing
@@ -154,7 +175,7 @@ const [profile, setProfile] = useState(() => {
   };
 
   // Validate password form
-  const handlePasswordSubmit = (e) => {
+  const handlePasswordSubmit = async (e) => {
     e.preventDefault();
 
     if (passwordData.newPassword.length < 8) {
@@ -167,14 +188,26 @@ const [profile, setProfile] = useState(() => {
       return;
     }
 
-    setError("");
-    setMessage("Password form validation successful.");
+    try {
+      const response = await changePassword({
+        currentPassword: passwordData.currentPassword,
+        newPassword: passwordData.newPassword,
+      });
 
-    setPasswordData({
-      currentPassword: "",
-      newPassword: "",
-      confirmPassword: ""
-    });
+      setError("");
+      setMessage(response.message);
+
+      setPasswordData({
+        currentPassword: "",
+        newPassword: "",
+        confirmPassword: "",
+      });
+
+      setShowPasswordForm(false);
+    } catch (err) {
+      setError(err.message);
+      setMessage("");
+    }
   };
 
   // Generate profile initials
