@@ -25,26 +25,36 @@ function createNotice(data) {
   });
 }
 
-function getGroupNotices(groupId) {
+function getGroupNotices(groupId, userId) {
   const sql = `
-        SELECT
-            n.notice_id,
-            n.group_id,
-            n.posted_by,
-            u.name AS posted_by_name,
-            n.title,
-            n.message,
-            n.created_at
-        FROM group_notices n
-        JOIN users u ON n.posted_by = u.user_id
-        WHERE n.group_id = ?
-        ORDER BY n.created_at DESC
-    `;
+    SELECT
+      n.notice_id,
+      n.group_id,
+      n.posted_by,
+      u.name AS posted_by_name,
+      n.title,
+      n.message,
+      n.created_at,
+      CASE
+        WHEN n.posted_by = ? THEN 1
+        WHEN EXISTS (
+          SELECT 1
+          FROM group_members gm
+          WHERE gm.group_id = n.group_id
+          AND gm.user_id = ?
+          AND gm.role = 'admin'
+        ) THEN 1
+        ELSE 0
+      END AS can_manage
+    FROM group_notices n
+    JOIN users u ON n.posted_by = u.user_id
+    WHERE n.group_id = ?
+    ORDER BY n.created_at DESC
+  `;
 
   return new Promise((resolve, reject) => {
-    sqlConnectionPool.query(sql, [groupId], (err, result) => {
+    sqlConnectionPool.query(sql, [userId, userId, groupId], (err, result) => {
       if (err) return reject(err);
-
       resolve(result);
     });
   });

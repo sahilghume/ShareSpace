@@ -1,31 +1,28 @@
-
-import { Outlet } from 'react-router-dom'
-import Navbar from './Navbar'
-import Sidebar from './Sidebar'
+import { Outlet } from "react-router-dom";
+import Navbar from "./Navbar";
+import Sidebar from "./Sidebar";
 
 function DashboardLayout() {
-
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="h-screen overflow-hidden bg-gray-50">
 
-      {/* Sidebar */}
+      {/* Fixed Sidebar */}
       <Sidebar />
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col">
+      <div className="h-screen md:ml-64 flex flex-col min-w-0">
 
         {/* Navbar */}
         <Navbar />
 
-        {/* Page Content */}
-        <main className="flex-1 p-8">
+        {/* Scrollable Page Content */}
+        <main className="flex-1 min-h-0 overflow-y-auto p-4 md:p-8">
           <Outlet />
         </main>
 
       </div>
-
     </div>
-  )
+  );
 }
 
-export default DashboardLayout
+export default DashboardLayout;

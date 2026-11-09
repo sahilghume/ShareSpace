@@ -1,9 +1,11 @@
 const Group = require("../models/Group");
 const crypto = require("crypto");
+const Chore = require("../models/Chore");
 
 const createGroup = async (req, res) => {
   try {
     const { groupName } = req.body;
+    const userId = req.user.id;
 
     if (!groupName || !groupName.trim()) {
       return res.status(400).json({
@@ -12,9 +14,16 @@ const createGroup = async (req, res) => {
       });
     }
 
-    const userId = req.user.id;
+    const existingGroups = await Group.getUserGroups(userId);
 
-    // Generate a unique group code
+    if (existingGroups.length > 0) {
+      return res.status(409).json({
+        success: false,
+        message:
+          "You already belong to a group. Leave your current group before creating another.",
+      });
+    }
+
     const groupCode = crypto.randomBytes(4).toString("hex").toUpperCase();
 
     const group = await Group.createGroupWithAdmin({
@@ -30,6 +39,13 @@ const createGroup = async (req, res) => {
     });
   } catch (error) {
     console.error("Create Group Error:", error);
+
+    if (error.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({
+        success: false,
+        message: "You already belong to a group.",
+      });
+    }
 
     return res.status(500).json({
       success: false,
@@ -59,12 +75,18 @@ const joinGroup = async (req, res) => {
       });
     }
 
-    const existingMember = await Group.findMember(group.group_id, userId);
+    const existingGroups = await Group.getUserGroups(userId);
 
-    if (existingMember) {
+    if (existingGroups.length > 0) {
+      const alreadyMember = existingGroups.some(
+        (item) => Number(item.group_id) === Number(group.group_id),
+      );
+
       return res.status(409).json({
         success: false,
-        message: "You are already a member of this group",
+        message: alreadyMember
+          ? "You are already a member of this group"
+          : "You already belong to another group. Leave your current group before joining another.",
       });
     }
 
@@ -73,6 +95,7 @@ const joinGroup = async (req, res) => {
       user_id: userId,
       role: "member",
     });
+    await Chore.resetGroupChoreRotation(group.group_id);
 
     return res.status(200).json({
       success: true,
@@ -81,6 +104,13 @@ const joinGroup = async (req, res) => {
     });
   } catch (error) {
     console.error("Join Group Error:", error);
+
+    if (error.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({
+        success: false,
+        message: "You already belong to a group.",
+      });
+    }
 
     return res.status(500).json({
       success: false,
@@ -211,6 +241,7 @@ const removeMember = async (req, res) => {
     }
 
     await Group.removeMember(groupId, memberId);
+    await Chore.resetGroupChoreRotation(groupId);
 
     return res.status(200).json({
       success: true,
@@ -248,6 +279,7 @@ const leaveGroup = async (req, res) => {
     }
 
     await Group.leaveGroup(groupId, userId);
+    await Chore.resetGroupChoreRotation(groupId);
 
     return res.status(200).json({
       success: true,
@@ -262,7 +294,78 @@ const leaveGroup = async (req, res) => {
     });
   }
 };
+const transferAdminAndLeave = async (req, res) => {
+  try {
+    const groupId = req.params.id;
+    const currentAdminId = req.user.id;
+    const { newAdminId } = req.body;
 
+    if (!newAdminId || !Number.isInteger(Number(newAdminId))) {
+      return res.status(400).json({
+        success: false,
+        message: "Please select a valid member",
+      });
+    }
+
+    const admin = await Group.findMember(groupId, currentAdminId);
+
+    if (!admin || admin.role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Only the group admin can transfer admin rights",
+      });
+    }
+
+    await Group.transferAdminAndLeave(
+      groupId,
+      currentAdminId,
+      Number(newAdminId),
+    );
+    await Chore.resetGroupChoreRotation(groupId);
+
+    return res.status(200).json({
+      success: true,
+      message: "Admin rights transferred and you left the group",
+    });
+  } catch (error) {
+    console.error("Transfer Admin Error:", error);
+
+    return res.status(400).json({
+      success: false,
+      message: error.message || "Unable to transfer admin rights",
+    });
+  }
+};
+
+const deleteGroup = async (req, res) => {
+  try {
+    const groupId = req.params.id;
+    const adminId = req.user.id;
+
+    const admin = await Group.findMember(groupId, adminId);
+
+    if (!admin || admin.role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Only the group admin can delete this group",
+      });
+    }
+
+    await Group.deleteGroup(groupId, adminId);
+
+    return res.status(200).json({
+      success: true,
+      message: "Group and all associated data deleted successfully",
+    });
+  } catch (error) {
+    console.error("Delete Group Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Unable to delete group",
+    });
+  }
+};
 module.exports = {
   createGroup,
   joinGroup,
@@ -271,4 +374,6 @@ module.exports = {
   getGroupMembers,
   removeMember,
   leaveGroup,
+  transferAdminAndLeave,
+  deleteGroup,
 };

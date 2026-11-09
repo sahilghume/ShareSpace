@@ -181,12 +181,13 @@ function getUserGroups(userId) {
 
 function getMembers(groupId) {
   const sql = `
-        SELECT u.user_id, u.name, u.email, u.phone,
-               gm.role, gm.joined_at
-        FROM group_members gm
-        JOIN users u ON gm.user_id = u.user_id
-        WHERE gm.group_id = ?
-    `;
+    SELECT u.user_id, u.name, u.email, u.phone,
+           gm.role, gm.joined_at
+    FROM group_members gm
+    JOIN users u ON gm.user_id = u.user_id
+    WHERE gm.group_id = ?
+    ORDER BY gm.id ASC
+`;
 
   return new Promise((resolve, reject) => {
     sqlConnectionPool.query(sql, [groupId], (err, result) => {
@@ -248,6 +249,189 @@ function leaveGroup(groupId, userId) {
     });
   });
 }
+
+function transferAdminAndLeave(groupId, currentAdminId, newAdminId) {
+  return new Promise((resolve, reject) => {
+    sqlConnectionPool.getConnection((err, connection) => {
+      if (err) return reject(err);
+
+      connection.beginTransaction((err) => {
+        if (err) {
+          connection.release();
+          return reject(err);
+        }
+
+        const rollback = (error) => {
+          connection.rollback(() => {
+            connection.release();
+            reject(error);
+          });
+        };
+
+        const sql = `
+          SELECT user_id, role
+          FROM group_members
+          WHERE group_id = ?
+          FOR UPDATE
+        `;
+
+        connection.query(sql, [groupId], (err, members) => {
+          if (err) return rollback(err);
+
+          const currentAdmin = members.find(
+            (member) => Number(member.user_id) === Number(currentAdminId),
+          );
+
+          const newAdmin = members.find(
+            (member) => Number(member.user_id) === Number(newAdminId),
+          );
+
+          if (!currentAdmin || currentAdmin.role !== "admin") {
+            return rollback(new Error("You are not the group admin"));
+          }
+
+          if (!newAdmin || Number(newAdminId) === Number(currentAdminId)) {
+            return rollback(new Error("Invalid member selected"));
+          }
+
+          connection.query(
+            `UPDATE group_members
+             SET role = 'admin'
+             WHERE group_id = ? AND user_id = ?`,
+            [groupId, newAdminId],
+            (err) => {
+              if (err) return rollback(err);
+
+              connection.query(
+                `DELETE FROM group_members
+                 WHERE group_id = ? AND user_id = ?`,
+                [groupId, currentAdminId],
+                (err, result) => {
+                  if (err) return rollback(err);
+
+                  if (result.affectedRows === 0) {
+                    return rollback(new Error("Unable to leave group"));
+                  }
+
+                  connection.commit((err) => {
+                    if (err) return rollback(err);
+
+                    connection.release();
+                    resolve({
+                      message:
+                        "Admin rights transferred and you left the group",
+                    });
+                  });
+                },
+              );
+            },
+          );
+        });
+      });
+    });
+  });
+}
+
+function deleteGroup(groupId, adminId) {
+  return new Promise((resolve, reject) => {
+    sqlConnectionPool.getConnection((err, connection) => {
+      if (err) return reject(err);
+
+      connection.beginTransaction((err) => {
+        if (err) {
+          connection.release();
+          return reject(err);
+        }
+
+        const rollback = (error) => {
+          connection.rollback(() => {
+            connection.release();
+            reject(error);
+          });
+        };
+
+        const checkAdminSql = `
+          SELECT role
+          FROM group_members
+          WHERE group_id = ? AND user_id = ?
+          FOR UPDATE
+        `;
+
+        connection.query(checkAdminSql, [groupId, adminId], (err, result) => {
+          if (err) return rollback(err);
+
+          if (result.length === 0 || result[0].role !== "admin") {
+            return rollback(
+              new Error("Only the group admin can delete this group"),
+            );
+          }
+
+          const deleteQueries = [
+            {
+              sql: `
+                  DELETE n FROM notifications n
+                  JOIN daily_chore_assignments d
+                  ON n.assignment_id = d.assignment_id
+                  WHERE d.group_id = ?
+                `,
+            },
+            {
+              sql: `
+                  DELETE FROM daily_chore_assignments
+                  WHERE group_id = ?
+                `,
+            },
+            {
+              sql: `
+                  DELETE es FROM expense_splits es
+                  JOIN expenses e ON es.expense_id = e.expense_id
+                  WHERE e.group_id = ?
+                `,
+            },
+            {
+              sql: `DELETE FROM expenses WHERE group_id = ?`,
+            },
+            {
+              sql: `DELETE FROM chores WHERE group_id = ?`,
+            },
+            {
+              sql: `DELETE FROM group_notices WHERE group_id = ?`,
+            },
+            {
+              sql: `DELETE FROM shopping_items WHERE group_id = ?`,
+            },
+            {
+              sql: `DELETE FROM group_members WHERE group_id = ?`,
+            },
+            {
+              sql: `DELETE FROM groupscreated WHERE group_id = ?`,
+            },
+          ];
+
+          const executeDelete = (index) => {
+            if (index === deleteQueries.length) {
+              return connection.commit((err) => {
+                if (err) return rollback(err);
+
+                connection.release();
+                resolve({
+                  message: "Group and all associated data deleted successfully",
+                });
+              });
+            }
+
+            connection.query(deleteQueries[index].sql, [groupId], (err) => {
+              if (err) return rollback(err);
+              executeDelete(index + 1);
+            });
+          };
+
+          executeDelete(0);
+        });
+      });
+    });
+  });
+}
 module.exports = {
   createGroupWithAdmin,
   findByCode,
@@ -258,4 +442,6 @@ module.exports = {
   removeMember,
   leaveGroup,
   addMember,
+  transferAdminAndLeave,
+  deleteGroup,
 };
